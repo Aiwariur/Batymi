@@ -51,6 +51,11 @@ export function registerGreenApiRoutes(app: FastifyInstance, services: Services)
       return { ok: false, error: "unknown GreenAPI instance" };
     }
 
+    // Прозрачный прокси: каждый сырой вебхук уходит в CRM (входящие,
+    // delivery-статусы), чтобы interactions/диалоги/воронка оставались
+    // полными. Ack GreenAPI не блокируется.
+    services.webhookProxy.forward(instanceId, request.body);
+
     const parsed = greenApiWebhookSchema.safeParse(request.body);
     if (!parsed.success) {
       reply.code(400);

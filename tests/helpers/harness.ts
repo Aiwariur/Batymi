@@ -4,8 +4,9 @@ import { InMemoryDebugRecorder } from "../../src/observability/debug-recorder";
 import { MemoryConversationStore } from "../../src/buffer/memory-store";
 import { Services } from "../../src/services";
 import { ConversationScheduler } from "../../src/queue/conversation.queue";
-import { createCrmClient } from "../../src/crm/crm.client";
-import { createGreenApiClient } from "../../src/greenapi/greenapi.client";
+import { createCrmClient, MockCrmClient } from "../../src/crm/crm.client";
+import { createMessageSender } from "../../src/crm/reply.sender";
+import { MockWebhookProxy } from "../../src/crm/webhook-proxy";
 import { createTranscriptionService } from "../../src/transcription/transcription.service";
 import { ChatMessage, LlmProvider } from "../../src/agent/llm.provider";
 import { handleConversationJob, RunOutcome } from "../../src/conversation/conversation.service";
@@ -106,6 +107,7 @@ export class RecordingLlm implements LlmProvider {
 export interface Harness {
   config: Config;
   services: Services;
+  crm: MockCrmClient;
   scheduler: TestScheduler;
   llm: RecordingLlm;
   store: MemoryConversationStore;
@@ -134,14 +136,16 @@ export function createHarness(overrides: Record<string, string> = {}): Harness {
   const debug = new InMemoryDebugRecorder();
   const llm = new RecordingLlm();
   const scheduler = new TestScheduler();
+  const crm = createCrmClient(config, logger, debug);
 
   const services: Services = {
     config,
     logger,
     store,
     scheduler,
-    crm: createCrmClient(config, logger, debug),
-    greenApi: createGreenApiClient(config, logger, debug),
+    crm,
+    sender: createMessageSender(config, logger, debug),
+    webhookProxy: new MockWebhookProxy(debug),
     llm,
     transcription: createTranscriptionService(config, logger),
     debug,
@@ -181,6 +185,7 @@ export function createHarness(overrides: Record<string, string> = {}): Harness {
   return {
     config,
     services,
+    crm: crm as MockCrmClient,
     scheduler,
     llm,
     store,

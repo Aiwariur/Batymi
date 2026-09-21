@@ -40,6 +40,38 @@ describe("greenapi webhook routes", () => {
     await app.close();
   });
 
+  it("proxies every raw webhook to the CRM", async () => {
+    const { app, harness } = setup();
+    const instanceId = harness.config.instances[0].id;
+
+    await app.inject({
+      method: "POST",
+      url: `/webhooks/greenapi/${instanceId}`,
+      payload: buildSimulatedPayload({ instanceId, chatId: "995555000555@c.us", text: "Да", idMessage: "m-fwd" }),
+    });
+
+    const forwarded = harness.debug.snapshot().forwardedWebhooks;
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]?.instanceId).toBe(instanceId);
+    expect(forwarded[0]?.payload).toMatchObject({ typeWebhook: "incomingMessageReceived" });
+    await app.close();
+  });
+
+  it("proxies delivery-status webhooks that the pipeline itself ignores", async () => {
+    const { app, harness } = setup();
+    const instanceId = harness.config.instances[0].id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/webhooks/greenapi/${instanceId}`,
+      payload: { typeWebhook: "outgoingMessageStatus", idMessage: "x", status: "delivered" },
+    });
+
+    expect(response.json()).toMatchObject({ ok: true, ignored: true });
+    expect(harness.debug.snapshot().forwardedWebhooks).toHaveLength(1);
+    await app.close();
+  });
+
   it("ignores duplicate webhooks", async () => {
     const { app, harness } = setup();
     const instanceId = harness.config.instances[0].id;

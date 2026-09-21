@@ -1,8 +1,9 @@
-import { CrmActionRecord, OutgoingMessage } from "../types";
+import { CrmActionRecord, ForwardedWebhookRecord, OutgoingMessage } from "../types";
 
 export interface DebugSnapshot {
   outgoing: OutgoingMessage[];
   crmActions: CrmActionRecord[];
+  forwardedWebhooks: ForwardedWebhookRecord[];
 }
 
 /**
@@ -13,6 +14,7 @@ export interface DebugSnapshot {
 export interface DebugRecorder {
   recordOutgoing(message: OutgoingMessage): void;
   recordCrmAction(action: string, payload: unknown): void;
+  recordForwardedWebhook(instanceId: string, payload: unknown): void;
   snapshot(): DebugSnapshot;
   reset(): void;
 }
@@ -22,6 +24,7 @@ const MAX_ENTRIES = 500;
 export class InMemoryDebugRecorder implements DebugRecorder {
   private outgoing: OutgoingMessage[] = [];
   private crmActions: CrmActionRecord[] = [];
+  private forwardedWebhooks: ForwardedWebhookRecord[] = [];
 
   recordOutgoing(message: OutgoingMessage): void {
     this.outgoing.push(message);
@@ -33,15 +36,22 @@ export class InMemoryDebugRecorder implements DebugRecorder {
     if (this.crmActions.length > MAX_ENTRIES) this.crmActions.shift();
   }
 
+  recordForwardedWebhook(instanceId: string, payload: unknown): void {
+    this.forwardedWebhooks.push({ ts: Date.now(), instanceId, payload });
+    if (this.forwardedWebhooks.length > MAX_ENTRIES) this.forwardedWebhooks.shift();
+  }
+
   snapshot(): DebugSnapshot {
     return {
       outgoing: [...this.outgoing],
       crmActions: [...this.crmActions],
+      forwardedWebhooks: [...this.forwardedWebhooks],
     };
   }
 
   reset(): void {
     this.outgoing = [];
     this.crmActions = [];
+    this.forwardedWebhooks = [];
   }
 }

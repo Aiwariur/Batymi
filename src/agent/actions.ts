@@ -1,6 +1,8 @@
-import { CrmClient } from "../crm/crm.client";
+import { CrmClient, ResidentialComplex } from "../crm/crm.client";
+import { DealInfoUpdate } from "../types";
 import { Logger } from "../observability/logger";
 import { DebugRecorder } from "../observability/debug-recorder";
+import { NO_COMPLEX_MARKERS } from "./gates";
 import { AgentAction } from "./schemas";
 
 export interface ActionExecutorContext {
@@ -8,7 +10,44 @@ export interface ActionExecutorContext {
   logger: Logger;
   debug: DebugRecorder;
   phone: string;
-  primaryFlatId: string | number | null;
+  primaryListingId: string | number | null;
+}
+
+/** Маркеры «нет ЖК» не назначают residential_complex_id — только complex_name. */
+export function isNoComplexMarker(name: string): boolean {
+  return NO_COMPLEX_MARKERS.has(name.trim().toLowerCase());
+}
+
+/**
+ * Матчинг ЖК по закрытому каталогу CRM: точное совпадение имени (без учёта
+ * регистра/пробелов). Не найдено — оставляем только complex_name для ручной
+ * проверки менеджером, id не выдумываем.
+ */
+export function matchComplex(
+  complexes: ResidentialComplex[],
+  name: string,
+): ResidentialComplex | null {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted || isNoComplexMarker(name)) return null;
+  return (
+    complexes.find((complex) => complex.name.trim().toLowerCase() === wanted) ?? null
+  );
+}
+
+/** Явная запись publication_consent по этому листингу в этом же пакете действий. */
+function hasExplicitConsentWrite(
+  actions: AgentAction[],
+  listingId: string | number,
+  primaryListingId: string | number | null,
+): boolean {
+  return actions.some((action) => {
+    if (action.type !== "update_rental_terms") return false;
+    const target = action.listingId ?? primaryListingId;
+    if (target === null || target === undefined || String(target) !== String(listingId)) {
+      return false;
+    }
+    return (action.data as Record<string, unknown>).publication_consent !== undefined;
+  });
 }
 
 export async function executeActions(
@@ -16,6 +55,21 @@ export async function executeActions(
   ctx: ActionExecutorContext,
 ): Promise<string[]> {
   const executed: string[] = [];
+
+  const needsComplexMatch = actions.some(
+    (action) =>
+      action.type === "update_deal_info" &&
+      action.data.complex_name !== undefined &&
+      action.data.complex_name.trim() !== "",
+  );
+  let complexes: ResidentialComplex[] = [];
+  if (needsComplexMatch) {
+    try {
+      complexes = await ctx.crm.getComplexes();
+    } catch (error) {
+      ctx.logger.warn({ err: (error as Error).message }, "action.complexes.unavailable");
+    }
+  }
 
   for (const action of actions) {
     switch (action.type) {
@@ -27,21 +81,62 @@ export async function executeActions(
         break;
       }
       case "update_deal_info": {
-        await ctx.crm.updateDealInfo(ctx.phone, action.data);
-        ctx.debug.recordCrmAction("update_deal_info", { phone: ctx.phone, data: action.data });
-        ctx.logger.info("action.update_deal_info");
+        const data: DealInfoUpdate = { ...action.data };
+        if (data.complex_name && !isNoComplexMarker(data.complex_name)) {
+          const match = matchComplex(complexes, data.complex_name);
+          if (match) data.residential_complex_id = match.id;
+        }
+        await ctx.crm.updateDealInfo(ctx.phone, data);
+        ctx.debug.recordCrmAction("update_deal_info", { phone: ctx.phone, data });
+        ctx.logger.info({ fields: Object.keys(data) }, "action.update_deal_info");
         executed.push("update_deal_info");
         break;
       }
-      case "set_crm_status": {
-        const flatId = action.flatId ?? ctx.primaryFlatId;
-        if (flatId === null || flatId === undefined) {
-          ctx.logger.error("action.set_crm_status.no_flat");
+      case "update_rental_terms": {
+        const listingId = action.listingId ?? ctx.primaryListingId;
+        if (listingId === null || listingId === undefined) {
+          ctx.logger.error("action.update_rental_terms.no_listing");
           break;
         }
-        await ctx.crm.setStatus(flatId, action.status);
-        ctx.debug.recordCrmAction("set_crm_status", { flatId, status: action.status });
-        ctx.logger.info({ flatId, status: action.status }, "action.set_crm_status");
+        await ctx.crm.updateRentalTerms(ctx.phone, listingId, action.data);
+        ctx.debug.recordCrmAction("update_rental_terms", {
+          phone: ctx.phone,
+          listingId,
+          data: action.data,
+        });
+        ctx.logger.info({ listingId, fields: Object.keys(action.data) }, "action.update_rental_terms");
+        executed.push("update_rental_terms");
+        break;
+      }
+      case "set_crm_status": {
+        const listingId = action.listingId ?? ctx.primaryListingId;
+        if (listingId === null || listingId === undefined) {
+          ctx.logger.error("action.set_crm_status.no_listing");
+          break;
+        }
+        // Согласие на сотрудничество покрывает публикацию объявления: разрешение
+        // у собственника не запрашивается, движок отмечает его сам при agreed
+        // (если агент в этом же пакете не записал явное true/false).
+        if (action.status === "agreed" && !hasExplicitConsentWrite(actions, listingId, ctx.primaryListingId)) {
+          try {
+            await ctx.crm.updateRentalTerms(ctx.phone, listingId, { publication_consent: true });
+            ctx.debug.recordCrmAction("update_rental_terms", {
+              phone: ctx.phone,
+              listingId,
+              data: { publication_consent: true },
+              auto: "consent_on_agreed",
+            });
+            ctx.logger.info({ listingId }, "action.publication_consent.auto_on_agreed");
+          } catch (error) {
+            ctx.logger.warn(
+              { err: (error as Error).message },
+              "action.publication_consent.auto_failed",
+            );
+          }
+        }
+        await ctx.crm.setStatus(listingId, action.status);
+        ctx.debug.recordCrmAction("set_crm_status", { listingId, status: action.status });
+        ctx.logger.info({ listingId, status: action.status }, "action.set_crm_status");
         executed.push("set_crm_status");
         break;
       }

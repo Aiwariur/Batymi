@@ -1,43 +1,90 @@
 import { describe, expect, it } from "vitest";
-import { flatsResponseSchema, contactResponseSchema } from "../../src/crm/crm.schemas";
+import {
+  chatReplyResponseSchema,
+  complexesResponseSchema,
+  listingsResponseSchema,
+  rentalTermsResponseSchema,
+} from "../../src/crm/crm.schemas";
 
-describe("CRM schemas", () => {
-  it("accepts a valid flats response and coerces numeric fields to strings", () => {
-    const parsed = flatsResponseSchema.safeParse({
-      flats: [
-        {
-          id: 123,
-          crm_status: "delivered",
-          price: 95000,
-          assigned_manager_id: 2,
-          contact_type: "owner",
-        },
-      ],
+const listingPayload = {
+  id: 101,
+  external_id: 101,
+  title: "2-комн. квартира",
+  address: "Batumi, Kobaladze 24",
+  price: 900,
+  currency: "USD",
+  phone: "+995555000001",
+  contact_name: "Owner",
+  crm_status: "delivered",
+  contact_type: "potential_owner",
+  assigned_manager_id: 2,
+  is_active: true,
+  window_view: null,
+  cadastral_code: null,
+  complex_name: null,
+  rental_terms: {
+    listing_id: 101,
+    price: 900,
+    currency: "USD",
+    transaction_type: "rent_long_term",
+    price_period: "month",
+    deposit_amount: null,
+    minimum_lease_months: null,
+    availability_status: "unknown",
+    commission_type: null,
+    commission_value: null,
+    commission_payer: "unknown",
+    publication_consent: null,
+  },
+};
+
+describe("crm schemas", () => {
+  it("parses the /flat/by-phone response with nested rental_terms", () => {
+    const parsed = listingsResponseSchema.parse({
+      success: true,
+      count: 1,
+      flats: [listingPayload],
     });
-    expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.flats[0].id).toBe(123);
-      expect(parsed.data.flats[0].price).toBe("95000");
-      expect(parsed.data.flats[0].assigned_manager_id).toBe(2);
-    }
+    const listing = parsed.flats[0];
+    expect(listing.id).toBe(101);
+    expect(listing.crm_status).toBe("delivered");
+    expect(listing.rental_terms?.transaction_type).toBe("rent_long_term");
+    expect(listing.rental_terms?.price_period).toBe("month");
+    expect(listing.rental_terms?.publication_consent).toBeNull();
   });
 
-  it("rejects a response without the flats array", () => {
-    expect(flatsResponseSchema.safeParse({ data: [] }).success).toBe(false);
+  it("coerces numeric field types coming from the legacy dict", () => {
+    const parsed = listingsResponseSchema.parse({
+      flats: [{ ...listingPayload, rooms: "2", area: "55.5", is_active: 1 }],
+    });
+    expect(parsed.flats[0].rooms).toBe("2");
+    expect(parsed.flats[0].is_active).toBe(true);
   });
 
-  it("rejects a response where flats is not an array", () => {
-    expect(flatsResponseSchema.safeParse({ flats: "nope" }).success).toBe(false);
+  it("parses the rental-terms update response", () => {
+    const parsed = rentalTermsResponseSchema.parse({
+      success: true,
+      ok: true,
+      listing_id: 101,
+      changed_fields: ["price", "minimum_lease_months"],
+    });
+    expect(parsed.changed_fields).toEqual(["price", "minimum_lease_months"]);
   });
 
-  it("rejects a flat without an id", () => {
-    expect(flatsResponseSchema.safeParse({ flats: [{ crm_status: "new" }] }).success).toBe(false);
+  it("parses the complexes catalog response", () => {
+    const parsed = complexesResponseSchema.parse({
+      success: true,
+      complexes: [{ id: 1, name: "Orbi City" }],
+    });
+    expect(parsed.complexes?.[0]).toEqual({ id: 1, name: "Orbi City" });
   });
 
-  it("accepts a contact response", () => {
-    expect(
-      contactResponseSchema.safeParse({ ok: true, phone_number: "+995555123456", contact_type: "owner" })
-        .success,
-    ).toBe(true);
+  it("parses the /chat/reply response", () => {
+    const parsed = chatReplyResponseSchema.parse({
+      success: true,
+      message_id: "3EB0E5D",
+      instance_id: "1101234567",
+    });
+    expect(parsed.message_id).toBe("3EB0E5D");
   });
 });

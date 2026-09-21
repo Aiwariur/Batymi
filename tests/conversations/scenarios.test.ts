@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { baseFlat, scenarios } from "./scenarios";
-import { actionMatches, evaluate, forbiddenHit } from "./evaluate";
+import { scenarios } from "./scenarios";
+import { actionMatches, buildListing, evaluate, forbiddenHit } from "./evaluate";
 import { AgentAction } from "../../src/agent/schemas";
 
 const REQUIRED_SCENARIOS = [
@@ -11,20 +11,19 @@ const REQUIRED_SCENARIOS = [
   "owner-changes-price",
   "owner-no-complex",
   "owner-gives-commission-percent",
-  "owner-wants-net-price",
   "owner-refuses",
   "owner-soft-objection",
-  "bad-address",
-  "multiple-flats",
-  "already-known-fields",
-  "user-corrects-crm-data",
+  "multiple-listings",
+  "agreed-phase-collection",
+  "agreed-confirm-qualified",
+  "agreed-confirm-incomplete",
+  "qualified-substantive-thanks",
   "several-messages-at-once",
-  "confirmation",
 ];
 
 describe("conversation scenario suite", () => {
-  it("has at least 20 scenarios", () => {
-    expect(scenarios.length).toBeGreaterThanOrEqual(20);
+  it("has at least 25 scenarios", () => {
+    expect(scenarios.length).toBeGreaterThanOrEqual(25);
   });
 
   it("has unique names and required scenarios", () => {
@@ -40,7 +39,9 @@ describe("conversation scenario suite", () => {
       expect(scenario.messages.length).toBeGreaterThan(0);
       for (const message of scenario.messages) expect(message.trim().length).toBeGreaterThan(0);
       for (const forbidden of scenario.forbiddenActions) {
-        expect(forbidden).toMatch(/^(set_contact_type|set_crm_status|update_deal_info)(:.*)?$/);
+        expect(forbidden).toMatch(
+          /^(set_contact_type|set_crm_status|update_deal_info|update_rental_terms)(:.*)?$/,
+        );
       }
     }
   });
@@ -61,12 +62,23 @@ describe("conversation evaluator", () => {
     expect(forbiddenHit([owner], "set_contact_type")).toBe(true);
   });
 
+  it("builds listings with merged rental terms", () => {
+    const listing = buildListing({
+      crm_status: "agreed",
+      rentalTerms: { availability_status: "available", minimum_lease_months: 12 },
+    });
+    expect(listing.crm_status).toBe("agreed");
+    expect(listing.rental_terms?.availability_status).toBe("available");
+    expect(listing.rental_terms?.minimum_lease_months).toBe(12);
+    expect(listing.rental_terms?.price).toBe(900);
+  });
+
   it("flags realtor stop scenario when qualification continues", () => {
     const scenario = scenarios.find((s) => s.name === "realtor")!;
     const failures = evaluate(
       scenario,
       [{ type: "set_contact_type", contactType: "realtor" }, qualified],
-      { ...baseFlat, contact_type: "realtor" },
+      buildListing({ contact_type: "realtor" }),
       false,
     );
     expect(failures).toContain("forbidden action set_crm_status:qualified");

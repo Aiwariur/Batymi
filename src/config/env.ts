@@ -45,10 +45,11 @@ const envSchema = z.object({
   LLM_TOP_P: z.coerce.number().min(0).max(1).default(0.9),
   TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
 
-  GREENAPI_API_URL: z.string().default("https://api.green-api.com"),
-
-  ALLOWED_MANAGER_IDS: z.string().default(""),
-  TERMINAL_CRM_STATUSES: z.string().default("qualified,disagreed"),
+  // Фильтр «только контакты, назначенные на наших менеджеров»:
+  // SENT_AUTO_MANAGER_ID=2 в арендной CRM — broadcast назначает менеджера 2.
+  ALLOWED_MANAGER_IDS: z.string().default("2"),
+  // Статусы, в которых движок не отвечает и не зовёт LLM.
+  TERMINAL_CRM_STATUSES: z.string().default("disagreed,archived,no_whatsapp"),
 
   MOCK_EXTERNALS: boolFromString(true),
   MOCK_CRM: boolOptional(),
@@ -92,7 +93,6 @@ export interface Config {
   llmTopP: number;
   transcriptionModel: string;
 
-  greenApiUrl: string;
   instances: InstanceConfig[];
 
   allowedManagerIds: number[];
@@ -173,7 +173,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     llmTopP: e.LLM_TOP_P,
     transcriptionModel: e.TRANSCRIPTION_MODEL,
 
-    greenApiUrl: e.GREENAPI_API_URL.replace(/\/+$/, ""),
     instances,
 
     allowedManagerIds: parseCsvNumbers(e.ALLOWED_MANAGER_IDS),

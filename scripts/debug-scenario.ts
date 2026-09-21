@@ -1,11 +1,12 @@
 import { loadConfig } from "../src/config/env";
 import { createLogger } from "../src/observability/logger";
 import { createLlmProvider } from "../src/agent/llm.provider";
-import { buildSystemPrompt } from "../src/agent/system-prompt";
+import { buildSystemPrompt, resolvePhase } from "../src/agent/system-prompt";
 import { runAgent } from "../src/agent/agent";
-import { Flat, HistoryEntry } from "../src/types";
-import { baseFlat, findScenario } from "../tests/conversations/scenarios";
-import { applyActions } from "../tests/conversations/evaluate";
+import { applyGates } from "../src/agent/gates";
+import { HistoryEntry } from "../src/types";
+import { findScenario } from "../tests/conversations/scenarios";
+import { applyActions, buildListing } from "../tests/conversations/evaluate";
 
 const names = process.argv.slice(2);
 if (names.length === 0) {
@@ -29,29 +30,40 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    const flat: Flat = { ...baseFlat, ...scenario.initialCRMState };
+    const listing = buildListing(scenario.initialCRMState);
     const history: HistoryEntry[] = [];
     console.log(`\n=== ${scenario.name} ===`);
     if (scenario.note) console.log(`note: ${scenario.note}`);
     console.log(`initial CRM: ${JSON.stringify(scenario.initialCRMState)}`);
 
     for (const message of scenario.messages) {
+      const phase = resolvePhase(listing.crm_status);
       const systemPrompt = buildSystemPrompt({
-        crm: { phone: flat.phone ?? "", contact: null, flats: [flat] },
-        flats: [flat],
-        primaryFlat: flat,
-        isTerminal: false,
+        crm: { phone: listing.phone ?? "", contact: null, listings: [listing] },
+        listings: [listing],
+        primaryListing: listing,
+        phase,
       });
       const { result } = await runAgent(llm, logger, { systemPrompt, history, batchText: message });
+      const gate = applyGates(result.actions, {
+        listings: [listing],
+        primaryListingId: listing.id,
+        phase,
+      });
       console.log(`\nuser: ${message}`);
       console.log(`reply: ${result.reply}`);
-      console.log(`actions: ${JSON.stringify(result.actions)}`);
+      console.log(`actions (llm): ${JSON.stringify(result.actions)}`);
+      if (gate.rejected.length > 0) {
+        console.log(`gate rejected: ${gate.rejected.map((r) => `${r.action.type}(${r.reason})`).join(", ")}`);
+      }
       console.log(`stopConversation: ${result.stopConversation}`);
-      applyActions(flat, result.actions);
+      applyActions(listing, gate.allowed);
       history.push({ role: "user", content: message, ts: Date.now() });
       if (result.reply) history.push({ role: "assistant", content: result.reply, ts: Date.now() });
     }
-    console.log(`\nfinal CRM: contact_type=${flat.contact_type} crm_status=${flat.crm_status}`);
+    console.log(
+      `\nfinal CRM: contact_type=${listing.contact_type} crm_status=${listing.crm_status} rental_terms=${JSON.stringify(listing.rental_terms)}`,
+    );
   }
 }
 

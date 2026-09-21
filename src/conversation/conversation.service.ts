@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
-import { Flat, NormalizedMessage } from "../types";
+import { Listing, NormalizedMessage } from "../types";
 import { Services } from "../services";
-import { buildSystemPrompt } from "../agent/system-prompt";
+import { buildSystemPrompt, resolvePhase } from "../agent/system-prompt";
 import { runAgent } from "../agent/agent";
 import { executeActions } from "../agent/actions";
+import { applyGates } from "../agent/gates";
 import { appendHistory, getHistory } from "./history.service";
 import { debounceTtlMs } from "../buffer/keys";
 
@@ -50,24 +51,26 @@ function outcome(status: RunStatus, runId: string, extra: Partial<RunOutcome> = 
   return { status, runId, ...extra };
 }
 
-export function filterFlatsByManager(
-  flats: Flat[],
+export function filterListingsByManager(
+  listings: Listing[],
   instanceManagerId: number | undefined,
   allowedManagerIds: number[],
-): Flat[] {
+): Listing[] {
   if (instanceManagerId !== undefined) {
-    return flats.filter((flat) => Number(flat.assigned_manager_id) === instanceManagerId);
+    return listings.filter((listing) => Number(listing.assigned_manager_id) === instanceManagerId);
   }
   if (allowedManagerIds.length > 0) {
-    return flats.filter((flat) => allowedManagerIds.includes(Number(flat.assigned_manager_id)));
+    return listings.filter((listing) =>
+      allowedManagerIds.includes(Number(listing.assigned_manager_id)),
+    );
   }
-  return flats;
+  return listings;
 }
 
-export function isTerminalFlat(flat: Flat, terminalStatuses: string[]): boolean {
-  const status = (flat.crm_status ?? "").toLowerCase();
+export function isTerminalListing(listing: Listing, terminalStatuses: string[]): boolean {
+  const status = (listing.crm_status ?? "").toLowerCase();
   if (terminalStatuses.includes(status)) return true;
-  if ((flat.contact_type ?? "").toLowerCase() === "realtor") return true;
+  if ((listing.contact_type ?? "").toLowerCase() === "realtor") return true;
   return false;
 }
 
@@ -153,22 +156,29 @@ export async function handleConversationJob(
     const phone = batch[0].senderPhone;
 
     stage = "crm.load";
-    const flats = await services.crm.getFlatsByPhone(phone);
-    log.info({ flatId: flats[0]?.id ?? null, count: flats.length }, "crm.loaded");
+    const listings = await services.crm.getListingsByPhone(phone);
+    log.info({ listingId: listings[0]?.id ?? null, count: listings.length }, "crm.loaded");
 
-    const allowedFlats = filterFlatsByManager(flats, instance?.managerId, services.config.allowedManagerIds);
-    if (allowedFlats.length === 0) {
-      log.warn({ found: flats.length }, "crm.no_allowed_flats");
+    const allowedListings = filterListingsByManager(
+      listings,
+      instance?.managerId,
+      services.config.allowedManagerIds,
+    );
+    if (allowedListings.length === 0) {
+      log.warn({ found: listings.length }, "crm.no_allowed_listings");
       return outcome("skipped", runId);
     }
 
-    const primaryFlat = allowedFlats[0];
-    const terminal = allowedFlats.every((flat) =>
-      isTerminalFlat(flat, services.config.terminalCrmStatuses),
+    const primaryListing = allowedListings[0];
+    const terminal = allowedListings.every((listing) =>
+      isTerminalListing(listing, services.config.terminalCrmStatuses),
     );
     if (terminal) {
       stage = "terminal";
-      log.info({ crmStatus: primaryFlat.crm_status, contactType: primaryFlat.contact_type }, "conversation.terminal");
+      log.info(
+        { crmStatus: primaryListing.crm_status, contactType: primaryListing.contact_type },
+        "conversation.terminal",
+      );
       await appendHistory(
         services.store,
         key,
@@ -178,27 +188,41 @@ export async function handleConversationJob(
       return outcome("terminal", runId);
     }
 
+    const phase = resolvePhase(primaryListing.crm_status);
+    log.info({ phase, crmStatus: primaryListing.crm_status }, "conversation.phase");
+
     stage = "llm";
     const history = await getHistory(services.store, key, {
       maxMessages: services.config.conversationHistoryMaxMessages,
       ttlSeconds: services.config.conversationHistoryTtlSeconds,
     });
     const systemPrompt = buildSystemPrompt({
-      crm: { phone, contact: null, flats: allowedFlats },
-      flats: allowedFlats,
-      primaryFlat,
-      isTerminal: false,
+      crm: { phone, contact: null, listings: allowedListings },
+      listings: allowedListings,
+      primaryListing,
+      phase,
     });
 
     const { result } = await runAgent(services.llm, log, { systemPrompt, history, batchText });
 
     stage = "crm.update";
-    const executed = await executeActions(result.actions, {
+    const gate = applyGates(result.actions, {
+      listings: allowedListings,
+      primaryListingId: primaryListing.id,
+      phase,
+    });
+    for (const rejectedAction of gate.rejected) {
+      log.warn(
+        { action: rejectedAction.action.type, reason: rejectedAction.reason },
+        "action.gate.rejected",
+      );
+    }
+    const executed = await executeActions(gate.allowed, {
       crm: services.crm,
       logger: log,
       debug: services.debug,
       phone,
-      primaryFlatId: primaryFlat.id,
+      primaryListingId: primaryListing.id,
     });
 
     await appendHistory(
@@ -208,13 +232,13 @@ export async function handleConversationJob(
       { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds },
     );
 
-    stage = "greenapi.send";
+    stage = "crm.reply";
     const reply = result.reply?.trim();
     if (reply) {
-      if (services.config.logMessageContent) log.debug({ reply }, "greenapi.reply.content");
-      log.info("greenapi.send.started");
-      await services.greenApi.sendMessage({ instanceId, chatId, message: reply });
-      log.info("greenapi.send.completed");
+      if (services.config.logMessageContent) log.debug({ reply }, "crm.reply.content");
+      log.info("crm.reply.started");
+      await services.sender.sendMessage({ instanceId, chatId, message: reply });
+      log.info("crm.reply.completed");
       await appendHistory(
         services.store,
         key,

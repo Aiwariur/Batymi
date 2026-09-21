@@ -1,43 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  filterFlatsByManager,
-  isTerminalFlat,
+  filterListingsByManager,
+  isTerminalListing,
   parseConversationKey,
 } from "../../src/conversation/conversation.service";
-import { executeActions } from "../../src/agent/actions";
-import { Flat } from "../../src/types";
-import { CrmClient } from "../../src/crm/crm.client";
+import { resolvePhase } from "../../src/agent/system-prompt";
+import { executeActions, matchComplex } from "../../src/agent/actions";
+import { Listing } from "../../src/types";
+import { CrmClient, ResidentialComplex } from "../../src/crm/crm.client";
 import { InMemoryDebugRecorder } from "../../src/observability/debug-recorder";
 import { createLogger } from "../../src/observability/logger";
 
-const flat = (overrides: Partial<Flat> = {}): Flat => ({ id: 1, assigned_manager_id: 2, ...overrides });
+const listing = (overrides: Partial<Listing> = {}): Listing => ({
+  id: 1,
+  assigned_manager_id: 2,
+  ...overrides,
+});
 
 describe("business rules", () => {
-  it("treats qualified and disagreed as terminal", () => {
-    expect(isTerminalFlat(flat({ crm_status: "qualified" }), ["qualified", "disagreed"])).toBe(true);
-    expect(isTerminalFlat(flat({ crm_status: "disagreed" }), ["qualified", "disagreed"])).toBe(true);
-    expect(isTerminalFlat(flat({ crm_status: "delivered" }), ["qualified", "disagreed"])).toBe(false);
+  it("treats disagreed, archived and no_whatsapp as terminal", () => {
+    const terminal = ["disagreed", "archived", "no_whatsapp"];
+    expect(isTerminalListing(listing({ crm_status: "disagreed" }), terminal)).toBe(true);
+    expect(isTerminalListing(listing({ crm_status: "archived" }), terminal)).toBe(true);
+    expect(isTerminalListing(listing({ crm_status: "no_whatsapp" }), terminal)).toBe(true);
+  });
+
+  it("does not treat qualified as terminal — it gets substantive replies", () => {
+    expect(isTerminalListing(listing({ crm_status: "qualified" }), ["disagreed", "archived", "no_whatsapp"])).toBe(false);
+    expect(isTerminalListing(listing({ crm_status: "delivered" }), ["disagreed", "archived", "no_whatsapp"])).toBe(false);
   });
 
   it("treats realtor contact type as terminal", () => {
-    expect(isTerminalFlat(flat({ contact_type: "realtor" }), ["qualified", "disagreed"])).toBe(true);
-    expect(isTerminalFlat(flat({ contact_type: "owner" }), ["qualified", "disagreed"])).toBe(false);
+    const terminal = ["disagreed", "archived", "no_whatsapp"];
+    expect(isTerminalListing(listing({ contact_type: "realtor" }), terminal)).toBe(true);
+    expect(isTerminalListing(listing({ contact_type: "owner" }), terminal)).toBe(false);
   });
 
-  it("filters flats by per-instance manager id", () => {
-    const flats = [flat({ id: 1, assigned_manager_id: 2 }), flat({ id: 2, assigned_manager_id: 7 })];
-    expect(filterFlatsByManager(flats, 2, []).map((f) => f.id)).toEqual([1]);
+  it("resolves conversation phase from crm_status", () => {
+    expect(resolvePhase("new")).toBe("primary");
+    expect(resolvePhase("sent")).toBe("primary");
+    expect(resolvePhase("delivered")).toBe("primary");
+    expect(resolvePhase("read")).toBe("primary");
+    expect(resolvePhase(undefined)).toBe("primary");
+    expect(resolvePhase("agreed")).toBe("agreed");
+    expect(resolvePhase("qualified")).toBe("qualified");
   });
 
-  it("filters flats by allowed manager ids", () => {
-    const flats = [flat({ id: 1, assigned_manager_id: 2 }), flat({ id: 2, assigned_manager_id: 7 })];
-    expect(filterFlatsByManager(flats, undefined, [2, 7]).map((f) => f.id)).toEqual([1, 2]);
-    expect(filterFlatsByManager(flats, undefined, [2]).map((f) => f.id)).toEqual([1]);
+  it("filters listings by per-instance manager id", () => {
+    const listings = [
+      listing({ id: 1, assigned_manager_id: 2 }),
+      listing({ id: 2, assigned_manager_id: 7 }),
+    ];
+    expect(filterListingsByManager(listings, 2, []).map((l) => l.id)).toEqual([1]);
   });
 
-  it("allows all flats when no manager filter is configured", () => {
-    const flats = [flat({ id: 1, assigned_manager_id: 2 }), flat({ id: 2, assigned_manager_id: null })];
-    expect(filterFlatsByManager(flats, undefined, [])).toHaveLength(2);
+  it("filters listings by allowed manager ids", () => {
+    const listings = [
+      listing({ id: 1, assigned_manager_id: 2 }),
+      listing({ id: 2, assigned_manager_id: 7 }),
+    ];
+    expect(filterListingsByManager(listings, undefined, [2, 7]).map((l) => l.id)).toEqual([1, 2]);
+    expect(filterListingsByManager(listings, undefined, [2]).map((l) => l.id)).toEqual([1]);
+  });
+
+  it("allows all listings when no manager filter is configured", () => {
+    const listings = [
+      listing({ id: 1, assigned_manager_id: 2 }),
+      listing({ id: 2, assigned_manager_id: null }),
+    ];
+    expect(filterListingsByManager(listings, undefined, [])).toHaveLength(2);
   });
 
   it("parses conversation keys", () => {
@@ -48,6 +79,25 @@ describe("business rules", () => {
   });
 });
 
+describe("complex matching", () => {
+  const complexes: ResidentialComplex[] = [
+    { id: 1, name: "Orbi City" },
+    { id: 2, name: "Batumi Towers" },
+  ];
+
+  it("matches exact names case-insensitively", () => {
+    expect(matchComplex(complexes, "orbi city")?.id).toBe(1);
+    expect(matchComplex(complexes, "Batumi Towers")?.id).toBe(2);
+  });
+
+  it("does not match unknown complexes or no-complex markers", () => {
+    expect(matchComplex(complexes, "Orbi City 2")).toBeNull();
+    expect(matchComplex(complexes, "нет ЖК")).toBeNull();
+    expect(matchComplex(complexes, "-")).toBeNull();
+    expect(matchComplex(complexes, "")).toBeNull();
+  });
+});
+
 describe("executeActions", () => {
   const logger = createLogger({ level: "silent", pretty: false });
 
@@ -55,59 +105,129 @@ describe("executeActions", () => {
     const calls: string[] = [];
     return {
       calls,
-      getFlatsByPhone: vi.fn(async () => []),
+      getListingsByPhone: vi.fn(async () => []),
       setStatus: vi.fn(async (id, status) => {
         calls.push(`status:${id}:${status}`);
       }),
       setContactType: vi.fn(async (_phone, type) => {
         calls.push(`type:${type}`);
       }),
-      updateDealInfo: vi.fn(async () => {
-        calls.push("deal");
+      updateDealInfo: vi.fn(async (_phone, data) => {
+        calls.push(`deal:${JSON.stringify(data)}`);
       }),
+      updateRentalTerms: vi.fn(async (_phone, listingId, data) => {
+        calls.push(`rental:${listingId}:${JSON.stringify(data)}`);
+      }),
+      getComplexes: vi.fn(async () => [
+        { id: 1, name: "Orbi City" },
+        { id: 2, name: "Batumi Towers" },
+      ]),
     };
   }
 
-  it("executes validated actions against the CRM", async () => {
+  it("executes validated rent actions against the CRM", async () => {
     const crm = makeCrm();
     const executed = await executeActions(
       [
         { type: "set_contact_type", contactType: "owner" },
-        { type: "update_deal_info", data: {
-          commission_type: "on_top",
-          commission_value: "",
-          price_net: "85000",
-          window_view: "море",
-          complex_name: "",
-          cadastral_code: "",
-          agent_notes: "",
-        } },
-        { type: "set_crm_status", status: "qualified" },
+        { type: "update_deal_info", data: { window_view: "море", complex_name: "Orbi City" } },
+        {
+          type: "update_rental_terms",
+          listingId: 101,
+          data: { price: 900, currency: "USD", minimum_lease_months: 12 },
+        },
+        { type: "set_crm_status", status: "agreed" },
       ],
       {
         crm,
         logger,
         debug: new InMemoryDebugRecorder(),
         phone: "+995555123456",
-        primaryFlatId: 101,
+        primaryListingId: 101,
       },
     );
 
-    expect(executed).toEqual(["set_contact_type", "update_deal_info", "set_crm_status"]);
+    expect(executed).toEqual([
+      "set_contact_type",
+      "update_deal_info",
+      "update_rental_terms",
+      "set_crm_status",
+    ]);
     expect(crm.calls).toContain("type:owner");
-    expect(crm.calls).toContain("deal");
-    expect(crm.calls).toContain("status:101:qualified");
+    expect(crm.calls.some((c) => c.startsWith("deal:") && c.includes("residential_complex_id"))).toBe(true);
+    expect(crm.calls).toContain('rental:101:{"price":900,"currency":"USD","minimum_lease_months":12}');
+    expect(crm.calls).toContain("status:101:agreed");
   });
 
-  it("uses the action flatId when provided", async () => {
+  it("uses the action listingId when provided", async () => {
     const crm = makeCrm();
-    await executeActions([{ type: "set_crm_status", status: "agreed", flatId: 555 }], {
+    await executeActions([{ type: "set_crm_status", status: "agreed", listingId: 555 }], {
       crm,
       logger,
       debug: new InMemoryDebugRecorder(),
       phone: "+995555123456",
-      primaryFlatId: 101,
+      primaryListingId: 101,
     });
     expect(crm.calls).toContain("status:555:agreed");
+  });
+
+  it("does not assign complex id for the no-complex marker", async () => {
+    const crm = makeCrm();
+    await executeActions(
+      [{ type: "update_deal_info", data: { complex_name: "нет ЖК" } }],
+      {
+        crm,
+        logger,
+        debug: new InMemoryDebugRecorder(),
+        phone: "+995555123456",
+        primaryListingId: 101,
+      },
+    );
+    expect(crm.calls[0]).toBe('deal:{"complex_name":"нет ЖК"}');
+  });
+
+  it("stamps publication_consent automatically when moving to agreed", async () => {
+    const crm = makeCrm();
+    await executeActions([{ type: "set_crm_status", status: "agreed", listingId: 101 }], {
+      crm,
+      logger,
+      debug: new InMemoryDebugRecorder(),
+      phone: "+995555123456",
+      primaryListingId: 101,
+    });
+    expect(crm.calls).toContain('rental:101:{"publication_consent":true}');
+    expect(crm.calls).toContain("status:101:agreed");
+  });
+
+  it("keeps an explicit consent write instead of the automatic one", async () => {
+    const crm = makeCrm();
+    await executeActions(
+      [
+        { type: "update_rental_terms", listingId: 101, data: { publication_consent: false } },
+        { type: "set_crm_status", status: "agreed", listingId: 101 },
+      ],
+      {
+        crm,
+        logger,
+        debug: new InMemoryDebugRecorder(),
+        phone: "+995555123456",
+        primaryListingId: 101,
+      },
+    );
+    expect(crm.calls.filter((c) => c.startsWith("rental:"))).toEqual([
+      'rental:101:{"publication_consent":false}',
+    ]);
+  });
+
+  it("does not stamp consent on other statuses", async () => {
+    const crm = makeCrm();
+    await executeActions([{ type: "set_crm_status", status: "disagreed", listingId: 101 }], {
+      crm,
+      logger,
+      debug: new InMemoryDebugRecorder(),
+      phone: "+995555123456",
+      primaryListingId: 101,
+    });
+    expect(crm.calls.filter((c) => c.startsWith("rental:"))).toEqual([]);
   });
 });

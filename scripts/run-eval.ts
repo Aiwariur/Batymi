@@ -1,16 +1,36 @@
 import { loadConfig } from "../src/config/env";
 import { createLogger, Logger } from "../src/observability/logger";
-import { createLlmProvider, LlmProvider } from "../src/agent/llm.provider";
-import { buildSystemPrompt } from "../src/agent/system-prompt";
+import { createLlmProvider, ChatMessage, LlmProvider } from "../src/agent/llm.provider";
+import { buildSystemPrompt, resolvePhase } from "../src/agent/system-prompt";
 import { runAgent } from "../src/agent/agent";
+import { applyGates } from "../src/agent/gates";
 import { AgentAction } from "../src/agent/schemas";
-import { Flat, HistoryEntry } from "../src/types";
-import { baseFlat, ConversationScenario, scenarios } from "../tests/conversations/scenarios";
-import { applyActions, evaluate } from "../tests/conversations/evaluate";
+import { HistoryEntry } from "../src/types";
+import { ConversationScenario, scenarios } from "../tests/conversations/scenarios";
+import { applyActions, buildListing, evaluate } from "../tests/conversations/evaluate";
 
 interface ScenarioResult {
   name: string;
   failures: string[];
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Транспортные сбои провайдера (таймауты/429/5xx) не должны ронять eval. */
+function withTransportRetry(llm: LlmProvider, logger: Logger): LlmProvider {
+  return {
+    async complete(messages: ChatMessage[]) {
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          return await llm.complete(messages);
+        } catch (error) {
+          if (attempt >= 3 || !(error as { retryable?: boolean }).retryable) throw error;
+          logger.warn({ attempt }, "eval.llm.retry");
+          await sleep(3000 * attempt);
+        }
+      }
+    },
+  };
 }
 
 async function runScenario(
@@ -18,27 +38,34 @@ async function runScenario(
   llm: LlmProvider,
   logger: Logger,
 ): Promise<ScenarioResult> {
-  const flat: Flat = { ...baseFlat, ...scenario.initialCRMState };
+  const listing = buildListing(scenario.initialCRMState);
   const history: HistoryEntry[] = [];
   const actions: AgentAction[] = [];
   let stopped = false;
 
   for (const message of scenario.messages) {
+    const phase = resolvePhase(listing.crm_status);
     const systemPrompt = buildSystemPrompt({
-      crm: { phone: flat.phone ?? "", contact: null, flats: [flat] },
-      flats: [flat],
-      primaryFlat: flat,
-      isTerminal: false,
+      crm: { phone: listing.phone ?? "", contact: null, listings: [listing] },
+      listings: [listing],
+      primaryListing: listing,
+      phase,
     });
     const { result } = await runAgent(llm, logger, { systemPrompt, history, batchText: message });
-    actions.push(...result.actions);
-    applyActions(flat, result.actions);
+    // eval повторяет прод-пайплайн: действия LLM проходят те же гейты
+    const gate = applyGates(result.actions, {
+      listings: [listing],
+      primaryListingId: listing.id,
+      phase,
+    });
+    actions.push(...gate.allowed);
+    applyActions(listing, gate.allowed);
     if (result.stopConversation) stopped = true;
     history.push({ role: "user", content: message, ts: Date.now() });
     if (result.reply) history.push({ role: "assistant", content: result.reply, ts: Date.now() });
   }
 
-  return { name: scenario.name, failures: evaluate(scenario, actions, flat, stopped) };
+  return { name: scenario.name, failures: evaluate(scenario, actions, listing, stopped) };
 }
 
 async function main(): Promise<void> {
@@ -49,7 +76,7 @@ async function main(): Promise<void> {
   }
 
   const logger = createLogger({ level: "warn", pretty: false });
-  const llm = createLlmProvider(config, logger);
+  const llm = withTransportRetry(createLlmProvider(config, logger), logger);
 
   const results: ScenarioResult[] = [];
   for (const scenario of scenarios) {

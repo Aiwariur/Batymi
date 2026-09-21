@@ -7,7 +7,12 @@ import { RedisConversationStore } from "./buffer/redis-store";
 import { BullConversationScheduler } from "./queue/conversation.queue";
 import { createConversationWorker } from "./queue/conversation.worker";
 import { createCrmClient } from "./crm/crm.client";
-import { createGreenApiClient } from "./greenapi/greenapi.client";
+import { createMessageSender } from "./crm/reply.sender";
+import {
+  createWebhookProxy,
+  createWebhookProxyWorker,
+  WebhookProxy,
+} from "./crm/webhook-proxy";
 import { createLlmProvider } from "./agent/llm.provider";
 import { createTranscriptionService } from "./transcription/transcription.service";
 import { createRedisConnection, createStoreConnection } from "./queue/connection";
@@ -45,6 +50,7 @@ async function main(): Promise<void> {
   const debug = new InMemoryDebugRecorder();
   const store = new RedisConversationStore(storeRedis);
   const scheduler = new BullConversationScheduler(queueRedis, config.queueName);
+  const webhookProxy: WebhookProxy = createWebhookProxy(config, logger, debug, queueRedis);
 
   const services: Services = {
     config,
@@ -52,7 +58,8 @@ async function main(): Promise<void> {
     store,
     scheduler,
     crm: createCrmClient(config, logger, debug),
-    greenApi: createGreenApiClient(config, logger, debug),
+    sender: createMessageSender(config, logger, debug),
+    webhookProxy,
     llm: createLlmProvider(config, logger),
     transcription: createTranscriptionService(config, logger),
     debug,
@@ -61,8 +68,12 @@ async function main(): Promise<void> {
   const runtime: RuntimeState = { redisConnected: true, workerStarted: false };
 
   let worker: Worker | undefined;
+  let webhookWorker: Worker | undefined;
   if (config.workerEnabled) {
     worker = createConversationWorker(services, queueRedis);
+    if (!config.mockCrm) {
+      webhookWorker = createWebhookProxyWorker(config, logger, queueRedis);
+    }
     runtime.workerStarted = true;
     logger.info({ concurrency: config.workerConcurrency }, "BullMQ worker started");
   }
@@ -84,7 +95,9 @@ async function main(): Promise<void> {
     try {
       if (app) await app.close();
       if (worker) await worker.close();
+      if (webhookWorker) await webhookWorker.close();
       await scheduler.close();
+      await webhookProxy.close();
       await storeRedis.quit().catch(() => undefined);
       await queueRedis.quit().catch(() => undefined);
     } catch (error) {
