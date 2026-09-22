@@ -89,6 +89,29 @@ describe("qualified completeness gate", () => {
     expect(missing).not.toContain("rental_terms.publication_consent");
   });
 
+  it("does not treat unknown commission or non-positive terms as complete", () => {
+    const missing = qualifiedMissingFields(
+      baseListing({
+        window_view: "море",
+        complex_name: "нет ЖК",
+        rental_terms: {
+          ...baseListing().rental_terms!,
+          ...completeTerms,
+          price: 0,
+          minimum_lease_months: -1,
+          commission_type: "unknown",
+        },
+      }),
+    );
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        "rental_terms.price",
+        "rental_terms.minimum_lease_months",
+        "rental_terms.commission_type",
+      ]),
+    );
+  });
+
   it("rejects qualified while fields are missing", () => {
     const listing = baseListing({
       complex_name: "Orbi City",
@@ -113,6 +136,43 @@ describe("qualified completeness gate", () => {
     );
     expect(result.allowed.map((a) => a.type)).toEqual(["update_deal_info", "set_crm_status"]);
     expect(result.rejected).toHaveLength(0);
+  });
+
+  it("does not let an unscoped or rejected write satisfy qualified", () => {
+    const listing = baseListing({
+      complex_name: "Orbi City",
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+    });
+    const result = applyGates(
+      [
+        { type: "set_crm_status", status: "qualified", listingId: 101 },
+        { type: "update_deal_info", listingId: 999, data: { window_view: "море" } },
+      ],
+      ctx([listing], "agreed"),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected.map((item) => item.reason)).toEqual([
+      "unknown_listing_id",
+      "qualified_incomplete:window_view",
+    ]);
+  });
+
+  it("moves qualified after accepted writes even when the model orders it first", () => {
+    const listing = baseListing({
+      complex_name: "Orbi City",
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+    });
+    const result = applyGates(
+      [
+        { type: "set_crm_status", status: "qualified", listingId: 101 },
+        { type: "update_deal_info", listingId: 101, data: { window_view: "море" } },
+      ],
+      ctx([listing], "agreed"),
+    );
+    expect(result.allowed.map((item) => item.type)).toEqual([
+      "update_deal_info",
+      "set_crm_status",
+    ]);
   });
 
   it("qualifies without cadastral code and publication consent", () => {
@@ -141,6 +201,22 @@ describe("listing addressing gates", () => {
   it("requires an explicit listingId when the contact has several listings", () => {
     const result = applyGates(
       [{ type: "update_rental_terms", data: { price: 950 } }],
+      ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
+    );
+    expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");
+  });
+
+  it("requires an explicit listingId for deal info with several listings", () => {
+    const result = applyGates(
+      [{ type: "update_deal_info", data: { window_view: "море" } }],
+      ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
+    );
+    expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");
+  });
+
+  it("requires an explicit listingId for contact status with several listings", () => {
+    const result = applyGates(
+      [{ type: "set_crm_status", status: "agreed" }],
       ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
     );
     expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");

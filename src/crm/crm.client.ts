@@ -39,9 +39,13 @@ export interface ResidentialComplex {
 
 export interface CrmClient {
   getListingsByPhone(phone: string): Promise<Listing[]>;
-  setStatus(listingId: string | number, status: CrmStatus): Promise<void>;
+  setStatus(
+    listingId: string | number,
+    status: CrmStatus,
+    options?: { suppressTelegram?: boolean },
+  ): Promise<void>;
   setContactType(phone: string, contactType: ContactType): Promise<void>;
-  updateDealInfo(phone: string, data: DealInfoUpdate): Promise<void>;
+  updateDealInfo(phone: string, listingId: string | number, data: DealInfoUpdate): Promise<void>;
   updateRentalTerms(
     phone: string,
     listingId: string | number,
@@ -132,11 +136,20 @@ export class RealCrmClient implements CrmClient {
     return parsed.data.flats as Listing[];
   }
 
-  async setStatus(listingId: string | number, status: CrmStatus): Promise<void> {
+  async setStatus(
+    listingId: string | number,
+    status: CrmStatus,
+    options?: { suppressTelegram?: boolean },
+  ): Promise<void> {
     const url = `${this.base}/status/set`;
+    const body = {
+      id: listingId,
+      status,
+      ...(options?.suppressTelegram ? { suppress_telegram: true } : {}),
+    };
     const { status: httpStatus, json } = await requestJson(
       url,
-      { method: "POST", body: JSON.stringify({ id: listingId, status }) },
+      { method: "POST", body: JSON.stringify(body) },
       this.config.crmApiKey,
     );
     assertOk(httpStatus, json);
@@ -160,11 +173,11 @@ export class RealCrmClient implements CrmClient {
     }
   }
 
-  async updateDealInfo(phone: string, data: DealInfoUpdate): Promise<void> {
+  async updateDealInfo(phone: string, listingId: string | number, data: DealInfoUpdate): Promise<void> {
     const url = `${this.base}/contacts/${encodeURIComponent(formatContactPhone(phone))}/deal`;
     const { status, json } = await requestJson(
       url,
-      { method: "POST", body: JSON.stringify(data) },
+      { method: "POST", body: JSON.stringify({ listing_id: listingId, ...data }) },
       this.config.crmApiKey,
     );
     assertOk(status, json);
@@ -230,6 +243,7 @@ interface MockContactState {
   contactType: ContactType;
   status: CrmStatus;
   managerId: number;
+  managerIsAi: boolean | null;
   listings: MockListingState[];
 }
 
@@ -294,6 +308,7 @@ function toListing(contact: MockContactState, listing: MockListingState, phone: 
     options: listing.options,
     agent_notes: null,
     assigned_manager_id: contact.managerId,
+    assigned_manager_is_ai: contact.managerIsAi,
     is_active: true,
     rental_terms: { ...listing.rental },
   };
@@ -322,6 +337,7 @@ export class MockCrmClient implements CrmClient {
         contactType: "potential_owner",
         status: "delivered",
         managerId: this.config.allowedManagerIds[0] ?? 2,
+        managerIsAi: null,
         listings: [mockListing(101)],
       } as MockContactState);
     const next: MockContactState = {
@@ -344,6 +360,7 @@ export class MockCrmClient implements CrmClient {
         contactType: "potential_owner",
         status: "delivered",
         managerId: this.config.allowedManagerIds[0] ?? 2,
+        managerIsAi: null,
         listings: [mockListing(101)],
       };
       this.contacts.set(key, state);
@@ -358,7 +375,11 @@ export class MockCrmClient implements CrmClient {
     return state.listings.map((listing) => toListing(state, listing, key));
   }
 
-  async setStatus(listingId: string | number, status: CrmStatus): Promise<void> {
+  async setStatus(
+    listingId: string | number,
+    status: CrmStatus,
+    _options?: { suppressTelegram?: boolean },
+  ): Promise<void> {
     const target = String(listingId);
     for (const [phone, state] of this.contacts) {
       if (state.listings.some((listing) => String(listing.id) === target)) {
@@ -379,9 +400,9 @@ export class MockCrmClient implements CrmClient {
     this.logger.debug({ phone, contactType }, "crm.mock.setContactType");
   }
 
-  async updateDealInfo(phone: string, data: DealInfoUpdate): Promise<void> {
+  async updateDealInfo(phone: string, listingId: string | number, data: DealInfoUpdate): Promise<void> {
     const state = this.stateFor(phone);
-    const listing = state.listings[0];
+    const listing = state.listings.find((item) => String(item.id) === String(listingId));
     if (listing) {
       if (data.window_view !== undefined) listing.windowView = data.window_view;
       if (data.cadastral_code !== undefined) listing.cadastralCode = data.cadastral_code;

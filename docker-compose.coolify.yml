@@ -1,0 +1,63 @@
+# Coolify stack: Batymi (WhatsApp-агент собственников + Redis)
+# Отдельный Docker Compose ресурс из ЭТОГО репозитория (Batymi), проект
+# SS.GE-Rent-LongTerm, сервер N8N-Work. Секреты задаются в UI Coolify:
+# CRM_API_KEY (= N8N_API_KEY CRM), GREENAPI_WEBHOOK_SECRET (общий с CRM),
+# LLM_API_KEY, GREENAPI_INSTANCE_1_ID. Compose только пробрасывает их внутрь.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      # CRM, куда агент пишет статусы и шлёт проксированные вебхуки
+      - CRM_BASE_URL=${CRM_BASE_URL:-https://admin.batumi-key.homes/api}
+      - CRM_API_KEY=${CRM_API_KEY:-}
+      # Общий секрет GreenAPI-ингресса (тот же, что у CRM ssge-rent)
+      - GREENAPI_WEBHOOK_SECRET=${GREENAPI_WEBHOOK_SECRET:-}
+      # Allowlist инстансов GreenAPI: вебхуки прочих инстансов отбрасываются
+      - GREENAPI_INSTANCE_1_ID=${GREENAPI_INSTANCE_1_ID:-}
+      - GREENAPI_INSTANCE_1_MANAGER_ID=${GREENAPI_INSTANCE_1_MANAGER_ID:-}
+      # LLM (OpenAI-совместимый провайдер, значения из UI Coolify)
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - TRANSCRIPTION_MODEL=${TRANSCRIPTION_MODEL:-whisper-1}
+      # Прод: никаких моков; API и BullMQ-воркер в одном процессе
+      - MOCK_EXTERNALS=false
+      - API_ENABLED=true
+      - WORKER_ENABLED=true
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_MESSAGE_CONTENT=false
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      # Временный доступ для проверки без домена: http://162.55.163.35:8300
+      # Убрать после подключения wa.batumi-key.homes
+      - "8300:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - batymi-redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  batymi-redis-data:

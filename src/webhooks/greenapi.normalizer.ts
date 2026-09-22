@@ -9,6 +9,13 @@ const TYPE_MAP: Record<string, MessageType> = {
   documentMessage: "document",
 };
 
+/** GreenAPI user conversations use a numeric phone followed by @c.us.
+ * Group chats (@g.us), broadcast ids, and opaque ids are never owner chats.
+ */
+export function isValidUserChatId(chatId: string): boolean {
+  return /^\d+@c\.us$/i.test(chatId);
+}
+
 export function phoneFromChatId(chatId: string): string {
   const local = chatId.split("@")[0] ?? chatId;
   return local.replace(/[^\d]/g, "");
@@ -32,6 +39,7 @@ export function normalizeGreenApiWebhook(
   const idMessage = payload.idMessage;
   const messageData = payload.messageData;
   if (!chatId || !idMessage || !messageData) return null;
+  if (!isValidUserChatId(chatId)) return null;
 
   const rawType = messageData.typeMessage ?? "unsupported";
   const type = mapType(rawType);

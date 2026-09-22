@@ -81,14 +81,19 @@ export async function executeActions(
         break;
       }
       case "update_deal_info": {
+        const listingId = action.listingId ?? ctx.primaryListingId;
+        if (listingId === null || listingId === undefined) {
+          ctx.logger.error("action.update_deal_info.no_listing");
+          break;
+        }
         const data: DealInfoUpdate = { ...action.data };
         if (data.complex_name && !isNoComplexMarker(data.complex_name)) {
           const match = matchComplex(complexes, data.complex_name);
           if (match) data.residential_complex_id = match.id;
         }
-        await ctx.crm.updateDealInfo(ctx.phone, data);
-        ctx.debug.recordCrmAction("update_deal_info", { phone: ctx.phone, data });
-        ctx.logger.info({ fields: Object.keys(data) }, "action.update_deal_info");
+        await ctx.crm.updateDealInfo(ctx.phone, listingId, data);
+        ctx.debug.recordCrmAction("update_deal_info", { phone: ctx.phone, listingId, data });
+        ctx.logger.info({ listingId, fields: Object.keys(data) }, "action.update_deal_info");
         executed.push("update_deal_info");
         break;
       }
@@ -134,7 +139,12 @@ export async function executeActions(
             );
           }
         }
-        await ctx.crm.setStatus(listingId, action.status);
+        // Batymi's agreed transition starts phase 2 collection.  Suppress
+        // CRM's legacy auto-publication hook for this request; operators and
+        // other callers retain the old default when the flag is absent.
+        await ctx.crm.setStatus(listingId, action.status, {
+          suppressTelegram: action.status === "agreed",
+        });
         ctx.debug.recordCrmAction("set_crm_status", { listingId, status: action.status });
         ctx.logger.info({ listingId, status: action.status }, "action.set_crm_status");
         executed.push("set_crm_status");

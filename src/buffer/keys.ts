@@ -11,8 +11,20 @@ export function seenKey(instanceId: string, idMessage: string): string {
   return `seen:${instanceId}:${idMessage}`;
 }
 
+export function ingressScheduledKey(instanceId: string, idMessage: string): string {
+  return `ingress-scheduled:${instanceId}:${idMessage}`;
+}
+
 export function pendingKey(key: string): string {
   return `conversation:${key}:pending`;
+}
+
+export function activeBatchKey(key: string): string {
+  return `conversation:${key}:active`;
+}
+
+export function activeBatchMessagesKey(key: string): string {
+  return `conversation:${key}:active:messages`;
 }
 
 export function debounceKey(key: string): string {

@@ -78,6 +78,7 @@ export const listingSchema = z
       .union([z.string(), z.number(), z.null()])
       .optional()
       .transform((value) => (value === undefined || value === null ? null : value)),
+    assigned_manager_is_ai: optionalBool,
     is_active: optionalBool,
     rental_terms: rentalTermsSchema.nullish(),
   })

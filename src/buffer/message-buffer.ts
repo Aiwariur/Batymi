@@ -19,16 +19,13 @@ export async function ingestMessage(
   message: NormalizedMessage,
   services: Services,
 ): Promise<IngestResult> {
-  const isNew = await services.store.markSeen(
-    message.instanceId,
-    message.idMessage,
-    services.config.idempotencyTtlSeconds,
-  );
-  if (!isNew) {
-    return { accepted: false, duplicate: true, buffered: false, reason: "duplicate" };
-  }
-
   if (message.type === "unsupported") {
+    const isNew = await services.store.markSeen(
+      message.instanceId,
+      message.idMessage,
+      services.config.idempotencyTtlSeconds,
+    );
+    if (!isNew) return { accepted: false, duplicate: true, buffered: false, reason: "duplicate" };
     services.logger.info(
       { instanceId: message.instanceId, chatId: message.chatId, rawType: message.rawType },
       "message.unsupported",
@@ -37,11 +34,42 @@ export async function ingestMessage(
   }
 
   const key = conversationKey(message.instanceId, message.chatId);
-  await services.store.pushPending(key, message);
-
   const token = randomUUID();
-  await services.store.setDebounce(key, token, debounceTtlMs(services.config.messageDebounceMs));
+  const isNew = await services.store.acceptInbound({
+    instanceId: message.instanceId,
+    idMessage: message.idMessage,
+    conversationKey: key,
+    message,
+    token,
+    idempotencyTtlSeconds: services.config.idempotencyTtlSeconds,
+    debounceTtlMs: debounceTtlMs(services.config.messageDebounceMs),
+  });
+  if (!isNew) {
+    if (await services.store.isIngressScheduled(message.instanceId, message.idMessage)) {
+      return { accepted: false, duplicate: true, buffered: false, reason: "duplicate" };
+    }
+
+    // The seen marker can survive a crash or a queue failure after the
+    // message was appended. Reuse the existing debounce token when possible,
+    // otherwise derive a stable recovery token so concurrent retries map to
+    // one BullMQ job instead of losing the pending message.
+    const token =
+      (await services.store.getDebounce(key)) ?? `retry-${message.instanceId}-${message.idMessage}`;
+    await services.store.setDebounce(key, token, debounceTtlMs(services.config.messageDebounceMs));
+    await services.scheduler.schedule(key, token, services.config.messageDebounceMs);
+    await services.store.markIngressScheduled(
+      message.instanceId,
+      message.idMessage,
+      services.config.idempotencyTtlSeconds,
+    );
+    return { accepted: false, duplicate: true, buffered: true, reason: "duplicate_recovered" };
+  }
   await services.scheduler.schedule(key, token, services.config.messageDebounceMs);
+  await services.store.markIngressScheduled(
+    message.instanceId,
+    message.idMessage,
+    services.config.idempotencyTtlSeconds,
+  );
 
   return { accepted: true, duplicate: false, buffered: true };
 }

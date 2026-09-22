@@ -63,6 +63,23 @@ describe("business rules", () => {
     expect(filterListingsByManager(listings, undefined, [2]).map((l) => l.id)).toEqual([1]);
   });
 
+  it("serves AI-flagged managers regardless of the legacy id list", () => {
+    const listings = [
+      listing({ id: 1, assigned_manager_id: 9, assigned_manager_is_ai: true }),
+      listing({ id: 2, assigned_manager_id: 2, assigned_manager_is_ai: false }),
+    ];
+    expect(filterListingsByManager(listings, undefined, [2]).map((l) => l.id)).toEqual([1]);
+    expect(filterListingsByManager(listings, undefined, []).map((l) => l.id)).toEqual([1]);
+  });
+
+  it("falls back to allowed manager ids when the AI flag is unknown", () => {
+    const listings = [
+      listing({ id: 1, assigned_manager_id: 2, assigned_manager_is_ai: null }),
+      listing({ id: 2, assigned_manager_id: 7, assigned_manager_is_ai: null }),
+    ];
+    expect(filterListingsByManager(listings, undefined, [2]).map((l) => l.id)).toEqual([1]);
+  });
+
   it("allows all listings when no manager filter is configured", () => {
     const listings = [
       listing({ id: 1, assigned_manager_id: 2 }),
@@ -112,8 +129,8 @@ describe("executeActions", () => {
       setContactType: vi.fn(async (_phone, type) => {
         calls.push(`type:${type}`);
       }),
-      updateDealInfo: vi.fn(async (_phone, data) => {
-        calls.push(`deal:${JSON.stringify(data)}`);
+      updateDealInfo: vi.fn(async (_phone, listingId, data) => {
+        calls.push(`deal:${listingId}:${JSON.stringify(data)}`);
       }),
       updateRentalTerms: vi.fn(async (_phone, listingId, data) => {
         calls.push(`rental:${listingId}:${JSON.stringify(data)}`);
@@ -154,7 +171,7 @@ describe("executeActions", () => {
       "set_crm_status",
     ]);
     expect(crm.calls).toContain("type:owner");
-    expect(crm.calls.some((c) => c.startsWith("deal:") && c.includes("residential_complex_id"))).toBe(true);
+    expect(crm.calls.some((c) => c.startsWith("deal:101:") && c.includes("residential_complex_id"))).toBe(true);
     expect(crm.calls).toContain('rental:101:{"price":900,"currency":"USD","minimum_lease_months":12}');
     expect(crm.calls).toContain("status:101:agreed");
   });
@@ -183,7 +200,7 @@ describe("executeActions", () => {
         primaryListingId: 101,
       },
     );
-    expect(crm.calls[0]).toBe('deal:{"complex_name":"нет ЖК"}');
+    expect(crm.calls[0]).toBe('deal:101:{"complex_name":"нет ЖК"}');
   });
 
   it("stamps publication_consent automatically when moving to agreed", async () => {
@@ -197,6 +214,7 @@ describe("executeActions", () => {
     });
     expect(crm.calls).toContain('rental:101:{"publication_consent":true}');
     expect(crm.calls).toContain("status:101:agreed");
+    expect(crm.setStatus).toHaveBeenCalledWith(101, "agreed", { suppressTelegram: true });
   });
 
   it("keeps an explicit consent write instead of the automatic one", async () => {

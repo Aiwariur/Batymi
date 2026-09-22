@@ -25,8 +25,8 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
       if (!config.crmApiKey) missing.push("CRM_API_KEY");
     }
     if (!config.mockLlm && !config.llmApiKey) missing.push("LLM_API_KEY");
-    if (!config.mockGreenApi && config.instances.some((i) => !i.token)) {
-      missing.push("GREENAPI instance tokens");
+    if ((config.isProduction || !config.mockGreenApi) && !config.webhookSecret) {
+      missing.push("GREENAPI_WEBHOOK_SECRET");
     }
 
     const redis = runtime.redisConnected ? "ok" : "error";

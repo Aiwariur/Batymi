@@ -66,15 +66,49 @@ async function main(): Promise<void> {
   };
 
   const runtime: RuntimeState = { redisConnected: true, workerStarted: false };
+  let storeRedisHealthy = true;
+  let queueRedisHealthy = true;
+  const updateRedisReadiness = (): void => {
+    runtime.redisConnected = storeRedisHealthy && queueRedisHealthy;
+  };
+  const registerRedisHealth = (redis: IORedis, setHealthy: (value: boolean) => void): void => {
+    redis.on("ready", () => {
+      setHealthy(true);
+      updateRedisReadiness();
+    });
+    redis.on("close", () => {
+      setHealthy(false);
+      updateRedisReadiness();
+    });
+    redis.on("end", () => {
+      setHealthy(false);
+      updateRedisReadiness();
+    });
+    redis.on("error", () => {
+      setHealthy(false);
+      updateRedisReadiness();
+    });
+  };
+  registerRedisHealth(storeRedis, (value) => {
+    storeRedisHealthy = value;
+  });
+  registerRedisHealth(queueRedis, (value) => {
+    queueRedisHealthy = value;
+  });
 
   let worker: Worker | undefined;
   let webhookWorker: Worker | undefined;
   if (config.workerEnabled) {
     worker = createConversationWorker(services, queueRedis);
+    worker.on("ready", () => {
+      runtime.workerStarted = true;
+    });
+    worker.on("closed", () => {
+      runtime.workerStarted = false;
+    });
     if (!config.mockCrm) {
       webhookWorker = createWebhookProxyWorker(config, logger, queueRedis);
     }
-    runtime.workerStarted = true;
     logger.info({ concurrency: config.workerConcurrency }, "BullMQ worker started");
   }
 

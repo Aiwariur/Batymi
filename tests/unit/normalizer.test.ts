@@ -70,6 +70,15 @@ describe("normalizeGreenApiWebhook", () => {
     } as GreenApiWebhookPayload;
     expect(normalizeGreenApiWebhook("7107577616", payload)).toBeNull();
   });
+
+  it("rejects group chat ids instead of treating them as owner phones", () => {
+    const payload = {
+      ...basePayload,
+      senderData: { chatId: "120363123456789@g.us" },
+      messageData: { typeMessage: "textMessage", textMessageData: { textMessage: "hi" } },
+    } as GreenApiWebhookPayload;
+    expect(normalizeGreenApiWebhook("7107577616", payload)).toBeNull();
+  });
 });
 
 describe("phoneFromChatId", () => {

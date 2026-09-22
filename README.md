@@ -1,6 +1,6 @@
 # Batymi — движок ответов собственникам (долгосрочная аренда)
 
-Небольшой production-ready backend на TypeScript, который заменяет n8n-агентов
+Небольшой backend на TypeScript, который заменяет n8n-агентов
 арендной CRM SS.GE-Rent (`n8n/N8N_AGENT_PROMPT.md` + `n8n/N8N_AGENT_AGREED_PROMPT.md`)
 — обработка входящих WhatsApp-сообщений собственников (GreenAPI + CRM + LLM).
 
@@ -64,11 +64,16 @@ GreenAPI ──► Batymi /webhooks/greenapi/:id ──► прокси сыро
   которые LLM пишет этими же действиями. Кадастровый номер и
   `publication_consent` в гейт не входят: кадастр нужен только при продаже,
   разрешение на публикацию у собственника не запрашивается;
-- при >1 активном листинге запись условий без явного `listingId` запрещена;
+- каждая запись объектных условий адресуется проверенным `listingId`; при >1
+  активном листинге отсутствие ID запрещается (для одного листинга гейт
+  подставляет его единственный проверенный ID перед вызовом CRM);
 - пустые строки отбрасываются — контракт «"" = не перезаписывать» соблюдается
   автоматически; неизвестные `listingId` отклоняются;
 - ЖК назначается только точным матчингом по каталогу `GET /api/complexes`
   (маркеры «нет ЖК» id не получают).
+- переход Batymi в `agreed` передаёт в CRM `suppress_telegram=true`, чтобы
+  включённая legacy-настройка `telegram_on_agree` не публиковала объявление до
+  завершения фазы 2; без этого поля legacy CRM сохраняет старое поведение.
 
 ### Разделение труда с CRM
 
@@ -127,8 +132,8 @@ SMOKE TEST PASSED
 
 ```text
 GreenAPI instances ──► POST /webhooks/greenapi/:instanceId
-                              │ validate + idempotency (idMessage)
-                              │ + прозрачный прокси сырого вебхука в CRM
+                              │ auth + validate + idempotency (idMessage)
+                              │ + durable proxy job в CRM
                               ▼
                         Redis pending buffer
                               │ debounce (MESSAGE_DEBOUNCE_MS)
@@ -144,8 +149,9 @@ GreenAPI instances ──► POST /webhooks/greenapi/:instanceId
                   (Zod + gates)       CRM /api/chat/reply
 ```
 
-- **Webhook делает минимум работы**: валидация, idempotency, буфер, постановка
-  отложенного job. Никогда не ждёт CRM/LLM/транскрипцию/отправку.
+- **Webhook делает минимум работы**: auth, валидация, idempotency, буфер и
+  подтверждение постановки proxy-job. Он не ждёт CRM/LLM/транскрипцию или
+  отправку WhatsApp; proxy-worker повторяет доставку в CRM.
 - **Один LLM call на batch** (не автономный agent loop). LLM возвращает
   `{ reply, actions, stopConversation }`, backend сам выполняет actions.
 - **Conversation key = `{instanceId}:{chatId}`** — один и тот же контакт на
@@ -163,7 +169,7 @@ GreenAPI instances ──► POST /webhooks/greenapi/:instanceId
 | GREENAPI Trigger (обе фазы) | `POST /webhooks/greenapi/:instanceId` + normalizer + прокси в CRM |
 | Redis counter/timestamp/wait/pop | `buffer/` (debounce через BullMQ + Redis token) |
 | Get flat by phone (`/flat/by-phone`) | `crm.client.getListingsByPhone` (+ `rental_terms`) |
-| Check manager (`== 2`) | `ALLOWED_MANAGER_IDS` / `managerId` на instance |
+| Check manager (`== 2`) | `assigned_manager_is_ai` из CRM (менеджер с `is_ai`) / `ALLOWED_MANAGER_IDS` (легаси) / `managerId` на instance |
 | N8N_AGENT_PROMPT (фаза 1, gpt-4o-mini) | `system-prompt.ts` → primary-фаза |
 | N8N_AGENT_AGREED_PROMPT (фаза 2) | `system-prompt.ts` → agreed-фаза |
 | tools (get_flat/set_status/set_type/update_deal/list_complexes) | 4 structured-действия + гейты + матчинг ЖК в коде |
@@ -203,12 +209,35 @@ GREENAPI_INSTANCE_1_ID=
 GREENAPI_INSTANCE_1_MANAGER_ID=
 ```
 
+В real mode входящий webhook принимается только с токеном GreenAPI
+`webhookUrlToken`: по умолчанию это заголовок `Authorization: Bearer <secret>`.
+Это соответствует [документации GreenAPI по webhookUrlToken](https://green-api.com/en/docs/api/receiving/technology-webhook-endpoint/).
+Задайте секрет и, при необходимости, имя заголовка:
+
+```env
+GREENAPI_WEBHOOK_SECRET=change-me
+GREENAPI_WEBHOOK_SECRET_HEADER=authorization
+```
+
+Batymi forwards the same value to the CRM as
+`Authorization: Bearer <secret>`; configure the Flask CRM receiver with the
+identical `GREENAPI_WEBHOOK_SECRET` value. `CRM_API_KEY` remains the normal
+CRM API credential. A custom inbound header changes only what Batymi accepts
+from GreenAPI; the Batymi-to-CRM header stays Bearer-compatible.
+
+В production и при `MOCK_GREENAPI=false` пустой секрет блокирует webhook и
+делает `/health/ready` неготовым. Групповые чаты (`@g.us`) и payload с другим
+`instanceData.idInstance` отклоняются до буфера и proxy.
+
 ### CRM (арендная CRM SS.GE-Rent)
 
 ```env
 CRM_BASE_URL=https://admin.batumi-key.homes/api
 CRM_API_KEY=            # N8N_API_KEY этой CRM (X-API-Key)
-ALLOWED_MANAGER_IDS=2   # SENT_AUTO_MANAGER_ID: «контакты, которым уже писали»
+# Агент обслуживает диалоги, где ответственный — AI-менеджер (Manager.is_ai,
+# флаг assigned_manager_is_ai от CRM). ALLOWED_MANAGER_IDS — легаси-fallback
+# для старой CRM без флага (пусто = все менеджеры).
+ALLOWED_MANAGER_IDS=
 TERMINAL_CRM_STATUSES=disagreed,archived,no_whatsapp
 ```
 
@@ -305,8 +334,10 @@ curl http://localhost:3000/health/live    # {"ok":true}
 curl http://localhost:3000/health/ready   # redis/queue/worker/config/instances
 ```
 
-`/health/ready` проверяет Redis, worker, наличие instances и обязательных
-переменных (в real mode — CRM/LLM ключи).
+`/health/ready` проверяет Redis, worker, наличие instances и обязательные
+переменные (в real mode — CRM/LLM ключи и `GREENAPI_WEBHOOK_SECRET`). Токены
+GreenAPI instance здесь не требуются: Batymi принимает webhook, а отправляет
+ответы CRM.
 
 ---
 
@@ -408,9 +439,11 @@ scripts/
   `qualified` — отдельная история: LLM отвечает по существу, но гейт блокирует
   любые CRM-действия.
 - **Прозрачный прокси вебхуков**: Batymi — единственный получатель вебхуков
-  GreenAPI, но каждый сырой вебхук уходит в CRM через BullMQ-очередь
-  `webhook-forward` (3 попытки). CRM остаётся источником правды по
-  interactions; ack GreenAPI не блокируется.
+  GreenAPI, но каждый валидный сырой вебхук уходит в CRM через BullMQ-очередь
+  `webhook-forward` (3 попытки). Детерминированный id задачи и удержание
+  завершённых id на `IDEMPOTENCY_TTL_SECONDS` не позволяют повторному
+  webhook или потерянному ответу CRM создать вторую interaction. Ack
+  подтверждается после постановки задачи.
 - **Ответы только через CRM `/api/chat/reply`** с явным `instance_id`
   принимающего инстанса: CRM пишет исходящее в interactions и гарантирует
   правило «отвечать с того же номера» без гонки с прокси.

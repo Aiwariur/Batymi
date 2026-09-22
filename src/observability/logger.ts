@@ -30,6 +30,15 @@ export function createLogger(options: LoggerOptions): Logger {
         "apiKey",
         "req.headers['x-api-key']",
         "headers['x-api-key']",
+        "req.headers.authorization",
+        "headers.authorization",
+        "req.headers['x-greenapi-webhook-secret']",
+        "headers['x-greenapi-webhook-secret']",
+        // The secret header name is configurable, so redact all request
+        // headers in structured request logs rather than relying on a fixed
+        // spelling.
+        "req.headers.*",
+        "headers.*",
       ],
       censor: "[redacted]",
     },

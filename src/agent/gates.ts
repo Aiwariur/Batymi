@@ -53,13 +53,19 @@ export function qualifiedMissingFields(listing: Listing): string[] {
   const missing: string[] = [];
   const terms = listing.rental_terms ?? {};
 
-  if (!Number(terms.price)) missing.push("rental_terms.price");
+  const price = Number(terms.price);
+  if (!Number.isFinite(price) || price <= 0) missing.push("rental_terms.price");
   if (!isFilled(terms.currency)) missing.push("rental_terms.currency");
   if (terms.price_period !== "month") missing.push("rental_terms.price_period");
   if (terms.transaction_type !== "rent_long_term") missing.push("rental_terms.transaction_type");
   if (terms.availability_status !== "available") missing.push("rental_terms.availability_status");
-  if (!Number(terms.minimum_lease_months)) missing.push("rental_terms.minimum_lease_months");
-  if (!isFilled(terms.commission_type)) missing.push("rental_terms.commission_type");
+  const minimumLeaseMonths = Number(terms.minimum_lease_months);
+  if (!Number.isFinite(minimumLeaseMonths) || minimumLeaseMonths <= 0) {
+    missing.push("rental_terms.minimum_lease_months");
+  }
+  if (!(terms.commission_type === "fixed" || terms.commission_type === "percent_month" || terms.commission_type === "months")) {
+    missing.push("rental_terms.commission_type");
+  }
   if (!isFilled(listing.window_view)) missing.push("window_view");
   if (!isFilled(listing.complex_name) && !isFilled(listing.residential_complex_id)) {
     missing.push("complex_name");
@@ -125,6 +131,21 @@ function sanitizeRentalTerms(action: UpdateRentalTermsAction): UpdateRentalTerms
   return { type: "update_rental_terms", listingId: action.listingId, data };
 }
 
+function resolveListingId(
+  listingId: string | number | undefined,
+  ctx: GateContext,
+  listingIds: Set<string>,
+): { listingId: string | number } | { reason: string } {
+  if (listingId === undefined) {
+    if (ctx.listings.length > 1) {
+      return { reason: "listing_id_required_for_multiple_listings" };
+    }
+    return { listingId: ctx.primaryListingId };
+  }
+  if (!listingIds.has(String(listingId))) return { reason: "unknown_listing_id" };
+  return { listingId };
+}
+
 /**
  * Детерминированные гейты поверх действий LLM — до любого вызова CRM.
  * Каждое правило дублирует системный промпт (system-prompt.ts), но проверяется
@@ -137,6 +158,9 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
 
   const listingIds = new Set(ctx.listings.map((listing) => String(listing.id)));
 
+  // First normalize and target every write.  Qualification is checked in a
+  // second pass so an LLM cannot qualify before a later write in the same
+  // batch, and rejected/unscoped actions cannot contribute to completeness.
   for (const action of actions) {
     switch (action.type) {
       case "set_contact_type": {
@@ -153,8 +177,9 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "qualified_dialog_no_actions");
           break;
         }
-        if (action.listingId !== undefined && !listingIds.has(String(action.listingId))) {
-          reject(action, "unknown_listing_id");
+        const target = resolveListingId(action.listingId, ctx, listingIds);
+        if ("reason" in target) {
+          reject(action, target.reason);
           break;
         }
         const sanitized = sanitizeDealInfo(action);
@@ -162,7 +187,7 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "no_fields_to_write");
           break;
         }
-        allowed.push(sanitized);
+        allowed.push({ ...sanitized, listingId: target.listingId });
         break;
       }
 
@@ -171,15 +196,9 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "qualified_dialog_no_actions");
           break;
         }
-        let listingId = action.listingId;
-        if (listingId === undefined) {
-          if (ctx.listings.length > 1) {
-            reject(action, "listing_id_required_for_multiple_listings");
-            break;
-          }
-          listingId = ctx.primaryListingId;
-        } else if (!listingIds.has(String(listingId))) {
-          reject(action, "unknown_listing_id");
+        const target = resolveListingId(action.listingId, ctx, listingIds);
+        if ("reason" in target) {
+          reject(action, target.reason);
           break;
         }
         const sanitized = sanitizeRentalTerms(action);
@@ -187,7 +206,7 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "no_fields_to_write");
           break;
         }
-        allowed.push({ ...sanitized, listingId });
+        allowed.push({ ...sanitized, listingId: target.listingId });
         break;
       }
 
@@ -206,33 +225,53 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "qualified_not_in_primary_phase");
           break;
         }
-        let listingId = statusAction.listingId;
-        if (listingId === undefined) {
-          listingId = ctx.primaryListingId;
-        } else if (!listingIds.has(String(listingId))) {
-          reject(action, "unknown_listing_id");
+        const target = resolveListingId(statusAction.listingId, ctx, listingIds);
+        if ("reason" in target) {
+          reject(action, target.reason);
           break;
         }
-        if (status === "qualified") {
-          const primary = ctx.listings.find(
-            (listing) => String(listing.id) === String(listingId),
-          );
-          if (!primary) {
-            reject(action, "unknown_listing_id");
-            break;
-          }
-          const merged = mergeActionsOntoListing(primary, [...allowed, ...actions], listingId);
-          const missing = qualifiedMissingFields(merged);
-          if (missing.length > 0) {
-            reject(action, `qualified_incomplete:${missing.join(",")}`);
-            break;
-          }
-        }
-        allowed.push({ ...statusAction, listingId });
+        allowed.push({ ...statusAction, listingId: target.listingId });
         break;
       }
     }
   }
 
-  return { allowed, rejected };
+  // Only sanitized actions accepted above may fill the qualification state.
+  // Keep qualified status writes after all data writes so CRM state cannot
+  // become qualified while one of its same-batch updates is still pending.
+  const acceptedWrites = allowed.filter(
+    (action) => action.type === "update_deal_info" || action.type === "update_rental_terms",
+  );
+  const finalized: AgentAction[] = [];
+  for (const action of allowed) {
+    if (action.type !== "set_crm_status" || action.status !== "qualified") {
+      finalized.push(action);
+      continue;
+    }
+    const listing = ctx.listings.find((item) => String(item.id) === String(action.listingId));
+    if (!listing) {
+      reject(action, "unknown_listing_id");
+      continue;
+    }
+    const merged = mergeActionsOntoListing(listing, acceptedWrites, action.listingId!);
+    const missing = qualifiedMissingFields(merged);
+    if (missing.length > 0) {
+      reject(action, `qualified_incomplete:${missing.join(",")}`);
+      continue;
+    }
+    finalized.push(action);
+  }
+
+  const qualifiedStatuses = finalized.filter(
+    (action) => action.type === "set_crm_status" && action.status === "qualified",
+  );
+  return {
+    allowed: [
+      ...finalized.filter(
+        (action) => !(action.type === "set_crm_status" && action.status === "qualified"),
+      ),
+      ...qualifiedStatuses,
+    ],
+    rejected,
+  };
 }

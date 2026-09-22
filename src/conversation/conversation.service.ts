@@ -7,6 +7,7 @@ import { executeActions } from "../agent/actions";
 import { applyGates } from "../agent/gates";
 import { appendHistory, getHistory } from "./history.service";
 import { debounceTtlMs } from "../buffer/keys";
+import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 
 const MAX_MANUAL_RETRIES = 2;
 
@@ -28,6 +29,7 @@ export type RunStatus =
   | "empty"
   | "rescheduled"
   | "terminal"
+  | "quarantined"
   | "failed";
 
 export interface RunOutcome {
@@ -59,12 +61,21 @@ export function filterListingsByManager(
   if (instanceManagerId !== undefined) {
     return listings.filter((listing) => Number(listing.assigned_manager_id) === instanceManagerId);
   }
+  return listings.filter((listing) => managerAllowedForAgent(listing, allowedManagerIds));
+}
+
+/**
+ * Диалог нашего агента — тот, где ответственный контакт помечен в CRM как
+ * AI-агент (Manager.is_ai → assigned_manager_is_ai). Флаг неизвестен (старая
+ * CRM / менеджер не назначен) — легаси-режим по ALLOWED_MANAGER_IDS.
+ */
+function managerAllowedForAgent(listing: Listing, allowedManagerIds: number[]): boolean {
+  if (listing.assigned_manager_is_ai === true) return true;
+  if (listing.assigned_manager_is_ai === false) return false;
   if (allowedManagerIds.length > 0) {
-    return listings.filter((listing) =>
-      allowedManagerIds.includes(Number(listing.assigned_manager_id)),
-    );
+    return allowedManagerIds.includes(Number(listing.assigned_manager_id));
   }
-  return listings;
+  return true;
 }
 
 export function isTerminalListing(listing: Listing, terminalStatuses: string[]): boolean {
@@ -123,15 +134,25 @@ export async function handleConversationJob(
   }
 
   const refreshInterval = Math.max(1000, Math.floor(services.config.conversationLockTtlMs / 3));
+  let lockLost = false;
   const refreshTimer = setInterval(() => {
     void services.store
       .refreshLock(key, lock.token, services.config.conversationLockTtlMs)
-      .catch(() => undefined);
+      .then((ok) => {
+        if (!ok) lockLost = true;
+      })
+      .catch(() => {
+        lockLost = true;
+      });
   }, refreshInterval);
 
   let batch: NormalizedMessage[] = [];
+  let activeBatch: ActiveBatch | null = null;
+  let outboundIntent: OutboundIntent | null = null;
+  let sendAttempted = false;
   let stage = "init";
   let failed = false;
+  let quarantined = false;
 
   try {
     stage = "buffer.drain";
@@ -140,12 +161,49 @@ export async function handleConversationJob(
       log.info("buffer.empty");
       return outcome("empty", runId);
     }
+    activeBatch = await services.store.getActiveBatch(key);
+    if (!activeBatch) throw new Error("active batch disappeared after drain");
+    if (activeBatch.quarantineReason) {
+      quarantined = true;
+      failed = true;
+      log.error({ reason: activeBatch.quarantineReason }, "conversation.quarantined");
+      return outcome("quarantined", runId);
+    }
+    if (activeBatch.outbound && ["sending", "ambiguous"].includes(activeBatch.outbound.state)) {
+      quarantined = true;
+      failed = true;
+      const reason = `outbound intent ${activeBatch.outbound.intentId} is ${activeBatch.outbound.state}; manual reconciliation required`;
+      await services.store.quarantineBatch(key, reason, activeBatch.batchKey).catch(() => undefined);
+      log.error({ reason }, "conversation.quarantined");
+      return outcome("quarantined", runId);
+    }
     log.info({ messages: batch.length }, "buffer.drained");
+
+    // A confirmed remote send must be finalized from the durable intent. Do
+    // not rerun the LLM or CRM actions when a worker crashed after the send.
+    if (activeBatch.outbound?.state === "sent") {
+      stage = "outbound.history.recover";
+      await appendHistory(
+        services.store,
+        key,
+        { role: "assistant", content: activeBatch.outbound.message, ts: Date.now() },
+        {
+          maxMessages: services.config.conversationHistoryMaxMessages,
+          ttlSeconds: services.config.conversationHistoryTtlSeconds,
+        },
+      );
+      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs))) {
+        throw new Error("conversation lock lost while recovering sent outbound intent");
+      }
+      await services.store.ackBatch(key, activeBatch.batchKey);
+      return outcome("processed", runId, { reply: activeBatch.outbound.message });
+    }
 
     stage = "batch.resolve";
     const batchText = await resolveBatchText(batch, services);
     if (!batchText) {
       log.warn("batch.no_text");
+      await services.store.ackBatch(key, activeBatch.batchKey);
       return outcome("empty", runId);
     }
     if (services.config.logMessageContent) {
@@ -166,6 +224,7 @@ export async function handleConversationJob(
     );
     if (allowedListings.length === 0) {
       log.warn({ found: listings.length }, "crm.no_allowed_listings");
+      await services.store.ackBatch(key, activeBatch.batchKey);
       return outcome("skipped", runId);
     }
 
@@ -185,6 +244,7 @@ export async function handleConversationJob(
         { role: "user", content: batchText, ts: Date.now() },
         { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds },
       );
+      await services.store.ackBatch(key, activeBatch.batchKey);
       return outcome("terminal", runId);
     }
 
@@ -206,6 +266,9 @@ export async function handleConversationJob(
     const { result } = await runAgent(services.llm, log, { systemPrompt, history, batchText });
 
     stage = "crm.update";
+    if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs))) {
+      throw new Error("conversation lock lost before CRM actions");
+    }
     const gate = applyGates(result.actions, {
       listings: allowedListings,
       primaryListingId: primaryListing.id,
@@ -236,17 +299,65 @@ export async function handleConversationJob(
     const reply = result.reply?.trim();
     if (reply) {
       if (services.config.logMessageContent) log.debug({ reply }, "crm.reply.content");
-      log.info("crm.reply.started");
-      await services.sender.sendMessage({ instanceId, chatId, message: reply });
-      log.info("crm.reply.completed");
+      stage = "outbound.intent";
+      outboundIntent = await services.store.prepareOutboundIntent({
+        conversationKey: key,
+        batchKey: activeBatch.batchKey,
+        instanceId,
+        chatId,
+        message: reply,
+      });
+      let sentResult: { idMessage?: string; mocked: boolean } | undefined;
+      if (outboundIntent.state === "sent") {
+        log.warn({ intentId: outboundIntent.intentId }, "crm.reply.already_sent");
+      } else if (outboundIntent.state === "prepared") {
+        if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs))) {
+          throw new Error("conversation lock lost before outbound claim");
+        }
+        const claimed = await services.store.claimOutboundIntent(key, outboundIntent.intentId);
+        if (!claimed || claimed.state !== "sending") {
+          quarantined = true;
+          failed = true;
+          const reason = `outbound intent ${outboundIntent.intentId} could not be exclusively claimed; manual reconciliation required`;
+          await services.store.quarantineBatch(key, reason, activeBatch.batchKey).catch(() => undefined);
+          return outcome("quarantined", runId);
+        }
+        outboundIntent = claimed;
+        sendAttempted = true;
+        log.info({ intentId: outboundIntent.intentId }, "crm.reply.started");
+        sentResult = await services.sender.sendMessage({
+          instanceId: outboundIntent.instanceId,
+          chatId: outboundIntent.chatId,
+          message: outboundIntent.message,
+        });
+        stage = "outbound.persist";
+        if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs))) {
+          throw new Error("conversation lock lost after outbound response");
+        }
+        await services.store.markOutboundSent(key, outboundIntent.intentId, sentResult.idMessage);
+        outboundIntent = { ...outboundIntent, state: "sent", idMessage: sentResult.idMessage };
+        log.info({ intentId: outboundIntent.intentId }, "crm.reply.completed");
+      } else if (outboundIntent.state === "sending" || outboundIntent.state === "ambiguous") {
+        quarantined = true;
+        failed = true;
+        const reason = `outbound intent ${outboundIntent.intentId} is ${outboundIntent.state}; manual reconciliation required`;
+        await services.store.quarantineBatch(key, reason, activeBatch.batchKey).catch(() => undefined);
+        return outcome("quarantined", runId);
+      }
+      const sentReply = outboundIntent.message;
       await appendHistory(
         services.store,
         key,
-        { role: "assistant", content: reply, ts: Date.now() },
+        { role: "assistant", content: sentReply, ts: Date.now() },
         { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds },
       );
     }
 
+    stage = "batch.ack";
+    if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs))) {
+      throw new Error("conversation lock lost before batch acknowledgement");
+    }
+    await services.store.ackBatch(key, activeBatch.batchKey);
     log.info(
       { duration: Date.now() - startedAt, actions: executed.length, stopConversation: result.stopConversation },
       "run.completed",
@@ -270,10 +381,24 @@ export async function handleConversationJob(
       "run.failed",
     );
 
-    if (batch.length > 0) {
-      for (const message of batch) {
-        await services.store.pushPending(key, message);
+    const currentActive = await services.store.getActiveBatch(key).catch(() => null);
+    // A stale worker must never quarantine or mutate a newer batch that took
+    // over after its lock expired. Only inspect the current store state when
+    // its batch fence still matches the batch this worker claimed.
+    const ownsActiveBatch = Boolean(activeBatch && currentActive?.batchKey === activeBatch.batchKey);
+    const currentOutbound = ownsActiveBatch ? currentActive?.outbound ?? outboundIntent : outboundIntent;
+    if (currentOutbound && (sendAttempted || currentOutbound.state === "sent")) {
+      const reason = `outbound processing failed at ${stage}: ${(error as Error).message}; manual reconciliation required before resuming`;
+      if (currentOutbound.state === "sending") {
+        await services.store
+          .markOutboundAmbiguous(key, currentOutbound.intentId, reason)
+          .catch(() => undefined);
       }
+      await services.store.quarantineBatch(key, reason, activeBatch?.batchKey).catch(() => undefined);
+      quarantined = true;
+      failed = true;
+      log.error({ reason, intentId: currentOutbound.intentId }, "conversation.quarantined");
+      return outcome("quarantined", runId);
     }
 
     const isFinalAttempt = attempt >= meta.maxAttempts;
@@ -296,7 +421,7 @@ export async function handleConversationJob(
     clearInterval(refreshTimer);
     await services.store.releaseLock(key, lock.token).catch(() => undefined);
 
-    if (!failed) {
+    if (!failed && !quarantined) {
       try {
         const remaining = await services.store.pendingCount(key);
         if (remaining > 0) {

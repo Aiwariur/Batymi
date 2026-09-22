@@ -130,6 +130,8 @@ export interface Listing {
   options?: string[] | string | null;
   agent_notes?: string | null;
   assigned_manager_id?: number | string | null;
+  /** Ответственный контакт — AI-агент (Manager.is_ai в CRM); null = неизвестно. */
+  assigned_manager_is_ai?: boolean | null;
   is_active?: boolean | null;
   rental_terms?: RentalTerms | null;
 }

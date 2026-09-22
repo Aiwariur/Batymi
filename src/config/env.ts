@@ -35,6 +35,12 @@ const envSchema = z.object({
   CRM_BASE_URL: z.string().default(""),
   CRM_API_KEY: z.string().default(""),
 
+  // GreenAPI calls this service directly. In real mode every webhook must
+  // carry this shared secret in the configured header.
+  GREENAPI_WEBHOOK_SECRET: z.string().trim().default(""),
+  // GreenAPI's native webhookUrlToken is sent as Authorization: Bearer ...
+  GREENAPI_WEBHOOK_SECRET_HEADER: z.string().trim().min(1).default("authorization"),
+
   LLM_PROVIDER: z.string().default("openai"),
   LLM_MODEL: z.string().default("gpt-4.1"),
   LLM_API_KEY: z.string().default(""),
@@ -45,9 +51,10 @@ const envSchema = z.object({
   LLM_TOP_P: z.coerce.number().min(0).max(1).default(0.9),
   TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
 
-  // Фильтр «только контакты, назначенные на наших менеджеров»:
-  // SENT_AUTO_MANAGER_ID=2 в арендной CRM — broadcast назначает менеджера 2.
-  ALLOWED_MANAGER_IDS: z.string().default("2"),
+  // Фильтр «диалоги нашего агента»: основной режим — флаг assigned_manager_is_ai
+  // от CRM (менеджер с Manager.is_ai, назначается при первой отправке).
+  // Список ниже — легаси-fallback для старой CRM без флага; пусто = все менеджеры.
+  ALLOWED_MANAGER_IDS: z.string().default(""),
   // Статусы, в которых движок не отвечает и не зовёт LLM.
   TERMINAL_CRM_STATUSES: z.string().default("disagreed,archived,no_whatsapp"),
 
@@ -82,6 +89,8 @@ export interface Config {
 
   crmBaseUrl: string;
   crmApiKey: string;
+  webhookSecret: string;
+  webhookSecretHeader: string;
 
   llmProvider: string;
   llmModel: string;
@@ -162,6 +171,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
     crmBaseUrl: e.CRM_BASE_URL.replace(/\/+$/, ""),
     crmApiKey: e.CRM_API_KEY,
+    webhookSecret: e.GREENAPI_WEBHOOK_SECRET,
+    webhookSecretHeader: e.GREENAPI_WEBHOOK_SECRET_HEADER.toLowerCase(),
 
     llmProvider: e.LLM_PROVIDER,
     llmModel: e.LLM_MODEL,
