@@ -41,7 +41,9 @@ services:
       - "8300:3000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health/live"]
+      # 127.0.0.1, не localhost: в alpine localhost может резолвиться в ::1,
+      # а Fastify слушает только IPv4 — healthcheck падает с connection refused
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health/live"]
       interval: 30s
       timeout: 10s
       retries: 5
