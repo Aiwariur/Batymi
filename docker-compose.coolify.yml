@@ -35,10 +35,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    ports:
-      # Временный доступ для проверки без домена: http://162.55.163.35:8300
-      # Убрать после подключения wa.batumi-key.homes
-      - "8300:3000"
+    # Публичный вход — только через домен wa.batumi-key.homes (TLS в Coolify),
+    # отдельный host-порт больше не нужен.
     restart: unless-stopped
     healthcheck:
       # 127.0.0.1, не localhost: в alpine localhost может резолвиться в ::1,
