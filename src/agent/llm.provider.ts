@@ -172,28 +172,28 @@ function mockResult(text: string, system: string): string {
 
   if (OWNER_RE.test(lower) && AGREE_RE.test(lower)) {
     if (phase === "agreed") {
-      const complete = Boolean(
-        (deal.window_view || /вид/i.test(lower)) &&
-          (deal.cadastral_code || /кадастр/i.test(lower)) &&
-          rental.publication_consent,
+      const essentialsKnown = Boolean(
+        rental.price && rental.minimum_lease_months && rental.availability_status === "available",
       );
-      if (complete || CONFIRM_RE.test(lower)) {
+      if (essentialsKnown || CONFIRM_RE.test(lower)) {
         actions.push({ type: "set_crm_status", status: "qualified" });
         return JSON.stringify({
-          reply: "Отлично, всё зафиксировал. Готовим публикацию, менеджер свяжется при необходимости.",
+          reply: "Зафиксировал. Готовим публикацию, при необходимости менеджер свяжется. Хорошего дня!",
           actions,
           stopConversation: true,
         });
       }
       return JSON.stringify({
-        reply: "Спасибо, зафиксировал. Подскажите ещё кадастровый номер и вид из окон, если есть.",
+        reply:
+          "Спасибо! Уточню сразу всё, что спрашивают клиенты чаще всего:\n— Какой вид из окон (море, горы, двор, улица)?\n— Квартира в каком ЖК? Если отдельный дом — так и запишу.",
         actions,
         stopConversation: false,
       });
     }
     actions.push({ type: "set_crm_status", status: "agreed" });
     return JSON.stringify({
-      reply: "Отлично, можем взять квартиру в работу. Подскажите минимальный срок, депозит и условия комиссии?",
+      reply:
+        "Спасибо! Уточню сразу всё, что спрашивают клиенты чаще всего:\n— Какой вид из окон (море, горы, двор, улица)?\n— Квартира в каком ЖК? Если отдельный дом — так и запишу.",
       actions,
       stopConversation: false,
     });

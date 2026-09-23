@@ -76,20 +76,20 @@ describe("qualified completeness gate", () => {
     price_period: "month",
     availability_status: "available",
     minimum_lease_months: 12,
-    commission_type: "fixed",
   };
 
   it("lists missing fields for an empty listing", () => {
     const missing = qualifiedMissingFields(baseListing());
     expect(missing).toContain("rental_terms.availability_status");
     expect(missing).toContain("rental_terms.minimum_lease_months");
-    expect(missing).toContain("window_view");
-    expect(missing).toContain("complex_name");
+    expect(missing).not.toContain("rental_terms.commission_type");
+    expect(missing).not.toContain("window_view");
+    expect(missing).not.toContain("complex_name");
     expect(missing).not.toContain("cadastral_code");
     expect(missing).not.toContain("rental_terms.publication_consent");
   });
 
-  it("does not treat unknown commission or non-positive terms as complete", () => {
+  it("does not treat non-positive price or lease as complete", () => {
     const missing = qualifiedMissingFields(
       baseListing({
         window_view: "море",
@@ -99,49 +99,70 @@ describe("qualified completeness gate", () => {
           ...completeTerms,
           price: 0,
           minimum_lease_months: -1,
-          commission_type: "unknown",
         },
       }),
     );
     expect(missing).toEqual(
-      expect.arrayContaining([
-        "rental_terms.price",
-        "rental_terms.minimum_lease_months",
-        "rental_terms.commission_type",
-      ]),
+      expect.arrayContaining(["rental_terms.price", "rental_terms.minimum_lease_months"]),
     );
   });
 
-  it("rejects qualified while fields are missing", () => {
+  it("commission, window view and complex are not required for qualified", () => {
+    const missing = qualifiedMissingFields(
+      baseListing({
+        window_view: null,
+        complex_name: null,
+        rental_terms: {
+          ...baseListing().rental_terms!,
+          ...completeTerms,
+          commission_type: null,
+        },
+      }),
+    );
+    expect(missing).toHaveLength(0);
+  });
+
+  it("rejects qualified while essentials are missing", () => {
     const listing = baseListing({
+      complex_name: "Orbi City",
+      window_view: "море",
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
+    });
+    const result = applyGates([{ type: "set_crm_status", status: "qualified" }], ctx([listing], "agreed"));
+    expect(result.rejected[0]?.reason).toContain("qualified_incomplete");
+    expect(result.rejected[0]?.reason).toContain("rental_terms.availability_status");
+  });
+
+  it("accepts qualified while window view is still unknown", () => {
+    const listing = baseListing({
+      window_view: null,
       complex_name: "Orbi City",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
     });
     const result = applyGates([{ type: "set_crm_status", status: "qualified" }], ctx([listing], "agreed"));
-    expect(result.rejected[0]?.reason).toContain("qualified_incomplete");
-    expect(result.rejected[0]?.reason).toContain("window_view");
+    expect(result.rejected).toHaveLength(0);
   });
 
   it("accepts qualified when the same batch fills the missing fields", () => {
     const listing = baseListing({
       complex_name: "Orbi City",
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
     const result = applyGates(
       [
-        { type: "update_deal_info", data: { window_view: "море" } },
+        { type: "update_rental_terms", data: { availability_status: "available" } },
         { type: "set_crm_status", status: "qualified" },
       ],
       ctx([listing], "agreed"),
     );
-    expect(result.allowed.map((a) => a.type)).toEqual(["update_deal_info", "set_crm_status"]);
+    expect(result.allowed.map((a) => a.type)).toEqual(["update_rental_terms", "set_crm_status"]);
     expect(result.rejected).toHaveLength(0);
   });
 
   it("does not let an unscoped or rejected write satisfy qualified", () => {
     const listing = baseListing({
       complex_name: "Orbi City",
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
     const result = applyGates(
       [
@@ -153,44 +174,34 @@ describe("qualified completeness gate", () => {
     expect(result.allowed).toHaveLength(0);
     expect(result.rejected.map((item) => item.reason)).toEqual([
       "unknown_listing_id",
-      "qualified_incomplete:window_view",
+      "qualified_incomplete:rental_terms.availability_status",
     ]);
   });
 
   it("moves qualified after accepted writes even when the model orders it first", () => {
     const listing = baseListing({
       complex_name: "Orbi City",
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
     const result = applyGates(
       [
         { type: "set_crm_status", status: "qualified", listingId: 101 },
-        { type: "update_deal_info", listingId: 101, data: { window_view: "море" } },
+        { type: "update_rental_terms", listingId: 101, data: { availability_status: "available" } },
       ],
       ctx([listing], "agreed"),
     );
     expect(result.allowed.map((item) => item.type)).toEqual([
-      "update_deal_info",
+      "update_rental_terms",
       "set_crm_status",
     ]);
   });
 
-  it("qualifies without cadastral code and publication consent", () => {
+  it("qualifies without cadastral code, consent, commission, window view and complex", () => {
     const listing = baseListing({
-      window_view: "море",
-      complex_name: "Orbi City",
+      window_view: null,
+      complex_name: null,
       cadastral_code: null,
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, publication_consent: null },
-    });
-    const result = applyGates([{ type: "set_crm_status", status: "qualified" }], ctx([listing], "agreed"));
-    expect(result.rejected).toHaveLength(0);
-  });
-
-  it("accepts qualified with the no-complex marker", () => {
-    const listing = baseListing({
-      window_view: "море",
-      complex_name: "нет ЖК",
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, publication_consent: null, commission_type: null },
     });
     const result = applyGates([{ type: "set_crm_status", status: "qualified" }], ctx([listing], "agreed"));
     expect(result.rejected).toHaveLength(0);
@@ -276,5 +287,101 @@ describe("field sanitation gates", () => {
       );
       expect(result.allowed).toHaveLength(1);
     }
+  });
+});
+
+describe("dedup gates against CRM state", () => {
+  it("rejects rental terms that only re-send current values", () => {
+    const listing = baseListing({
+      rental_terms: {
+        ...baseListing().rental_terms!,
+        price: 900,
+        currency: "USD",
+        minimum_lease_months: 12,
+        availability_status: "available",
+      },
+    });
+    const result = applyGates(
+      [
+        {
+          type: "update_rental_terms",
+          data: { price: 900, currency: "USD", minimum_lease_months: 12, availability_status: "available" },
+        },
+      ],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("no_changes_vs_crm");
+  });
+
+  it("treats numerically equal values as duplicates regardless of format", () => {
+    const listing = baseListing({
+      rental_terms: {
+        ...baseListing().rental_terms!,
+        price: "900",
+        commission_value: "100.00",
+      } as Listing["rental_terms"],
+    });
+    const result = applyGates(
+      [{ type: "update_rental_terms", data: { price: 900, commission_value: "100" } }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("no_changes_vs_crm");
+  });
+
+  it("keeps only changed fields and drops the unchanged ones", () => {
+    const listing = baseListing({
+      rental_terms: { ...baseListing().rental_terms!, price: 900, minimum_lease_months: 12 },
+    });
+    const result = applyGates(
+      [{ type: "update_rental_terms", data: { price: 900, deposit_amount: 500 } }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(1);
+    expect((result.allowed[0] as { data: Record<string, unknown> }).data).toEqual({
+      deposit_amount: 500,
+    });
+  });
+
+  it("rejects deal info that re-sends current values", () => {
+    const listing = baseListing({ window_view: "море", complex_name: "нет ЖК" });
+    const result = applyGates(
+      [{ type: "update_deal_info", data: { window_view: "море", complex_name: "нет ЖК" } }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("no_changes_vs_crm");
+  });
+
+  it("keeps deal info with at least one changed field", () => {
+    const listing = baseListing({ window_view: "море" });
+    const result = applyGates(
+      [{ type: "update_deal_info", data: { window_view: "море", complex_name: "Orbi City" } }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(1);
+    expect((result.allowed[0] as { data: Record<string, unknown> }).data).toEqual({
+      complex_name: "Orbi City",
+    });
+  });
+
+  it("rejects set_contact_type that matches the current contact type", () => {
+    const listing = baseListing({ contact_type: "owner" });
+    const result = applyGates(
+      [{ type: "set_contact_type", contactType: "owner" }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("unchanged_contact_type");
+  });
+
+  it("allows set_contact_type when the type actually changes", () => {
+    const listing = baseListing({ contact_type: "potential_owner" });
+    const result = applyGates(
+      [{ type: "set_contact_type", contactType: "owner" }],
+      ctx([listing]),
+    );
+    expect(result.allowed).toHaveLength(1);
   });
 });

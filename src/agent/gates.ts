@@ -45,9 +45,14 @@ const hasText = (value: string | undefined): value is string =>
   value !== undefined && value.trim() !== "";
 
 /**
- * Полнота фазы 2: всё, что требует арендный гайд для qualified.
- * Проверяется по «склеенному» состоянию: CRM-данные + поля, которые
- * LLM пишет этими же действиями (update_deal_info / update_rental_terms).
+ * Полнота фазы 2: минимум, без которого объявление нельзя публиковать.
+ * Проверяется по «склеенному» состоянию: CRM-данные + поля, которые LLM
+ * пишет этими же действиями (update_deal_info / update_rental_terms).
+ *
+ * Комиссия, вид из окон, ЖК, кадастровый номер и publication_consent в гейт
+ * сознательно НЕ входят: публикация их не требует, а диалог не должен
+ * упираться в один неназванный ответ — недостающее агент фиксирует в
+ * agent_notes, остальное доденет менеджер.
  */
 export function qualifiedMissingFields(listing: Listing): string[] {
   const missing: string[] = [];
@@ -63,16 +68,6 @@ export function qualifiedMissingFields(listing: Listing): string[] {
   if (!Number.isFinite(minimumLeaseMonths) || minimumLeaseMonths <= 0) {
     missing.push("rental_terms.minimum_lease_months");
   }
-  if (!(terms.commission_type === "fixed" || terms.commission_type === "percent_month" || terms.commission_type === "months")) {
-    missing.push("rental_terms.commission_type");
-  }
-  if (!isFilled(listing.window_view)) missing.push("window_view");
-  if (!isFilled(listing.complex_name) && !isFilled(listing.residential_complex_id)) {
-    missing.push("complex_name");
-  }
-
-  // Кадастровый номер и publication_consent сознательно НЕ входят в гейт:
-  // кадастр нужен только при продаже, разрешение на публикацию не запрашивается.
 
   return missing;
 }
@@ -146,6 +141,58 @@ function resolveListingId(
   return { listingId };
 }
 
+function findListing(ctx: GateContext, listingId: string | number): Listing | undefined {
+  return ctx.listings.find((listing) => String(listing.id) === String(listingId));
+}
+
+/**
+ * Совпадение записываемого значения с текущим значением CRM: числа сравниваются
+ * численно (900 === "900.00"), остальное — по обрезанной строке. LLM любит
+ * пересылать уже записанный пакет условий целиком — такие записи не нужны.
+ */
+function sameStoredValue(current: unknown, incoming: unknown): boolean {
+  const norm = (value: unknown) =>
+    value === undefined || value === null ? null : String(value).trim();
+  const a = norm(current);
+  const b = norm(incoming);
+  if (a === null || b === null) return a === b;
+  if (a === b) return true;
+  const na = Number(a.replace(",", "."));
+  const nb = Number(b.replace(",", "."));
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+function dropUnchangedDealFields(
+  listing: Listing | undefined,
+  data: UpdateDealInfoAction["data"],
+): UpdateDealInfoAction["data"] {
+  const current: Record<string, unknown> = listing
+    ? {
+        window_view: listing.window_view,
+        cadastral_code: listing.cadastral_code,
+        complex_name: listing.complex_name,
+        agent_notes: listing.agent_notes,
+      }
+    : {};
+  const diff: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!sameStoredValue(current[key], value)) diff[key] = value;
+  }
+  return diff as UpdateDealInfoAction["data"];
+}
+
+function dropUnchangedRentalFields(
+  listing: Listing | undefined,
+  data: RentalTermsUpdate,
+): RentalTermsUpdate {
+  const terms = (listing?.rental_terms ?? {}) as Record<string, unknown>;
+  const diff: RentalTermsUpdate = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!sameStoredValue(terms[key], value)) (diff as Record<string, unknown>)[key] = value;
+  }
+  return diff;
+}
+
 /**
  * Детерминированные гейты поверх действий LLM — до любого вызова CRM.
  * Каждое правило дублирует системный промпт (system-prompt.ts), но проверяется
@@ -168,6 +215,13 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "qualified_dialog_no_actions");
           break;
         }
+        const currentTypes = new Set(
+          ctx.listings.map((listing) => (listing.contact_type ?? "").toLowerCase()),
+        );
+        if (currentTypes.size === 1 && currentTypes.has(action.contactType.toLowerCase())) {
+          reject(action, "unchanged_contact_type");
+          break;
+        }
         allowed.push(action);
         break;
       }
@@ -187,7 +241,12 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "no_fields_to_write");
           break;
         }
-        allowed.push({ ...sanitized, listingId: target.listingId });
+        const deduped = dropUnchangedDealFields(findListing(ctx, target.listingId), sanitized.data);
+        if (Object.keys(deduped).length === 0) {
+          reject(action, "no_changes_vs_crm");
+          break;
+        }
+        allowed.push({ ...sanitized, listingId: target.listingId, data: deduped });
         break;
       }
 
@@ -206,7 +265,12 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "no_fields_to_write");
           break;
         }
-        allowed.push({ ...sanitized, listingId: target.listingId });
+        const deduped = dropUnchangedRentalFields(findListing(ctx, target.listingId), sanitized.data);
+        if (Object.keys(deduped).length === 0) {
+          reject(action, "no_changes_vs_crm");
+          break;
+        }
+        allowed.push({ ...sanitized, listingId: target.listingId, data: deduped });
         break;
       }
 
