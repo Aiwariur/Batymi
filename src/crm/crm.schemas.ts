@@ -65,11 +65,18 @@ export const listingSchema = z
     cadastral_code: optionalString,
     description: optionalString,
     options: z
-      .union([z.array(z.string()), z.string(), z.null()])
+      .union([z.array(z.union([z.string(), z.number(), z.boolean(), z.record(z.unknown())])), z.string(), z.record(z.unknown()), z.null()])
       .optional()
-      .transform((value) => {
+      .transform((value): string[] | string | null => {
         if (value === undefined || value === null) return null;
-        if (Array.isArray(value)) return value;
+        // CRM хранит удобства как JSON-словарь {"wifi": true, ...} —
+        // превращаем в список включённых ключей
+        if (!Array.isArray(value) && typeof value === "object") {
+          return Object.entries(value as Record<string, unknown>)
+            .filter(([, v]) => v === true || v === "true" || v === 1 || v === "1" || (typeof v === "string" && v.trim() !== ""))
+            .map(([k, v]) => (typeof v === "string" && v !== "true" && v !== "1" ? `${k}: ${v}` : k));
+        }
+        if (Array.isArray(value)) return value.map((item) => (typeof item === "object" && item !== null ? JSON.stringify(item) : String(item)));
         // JSON-строка опций из CRM — показываем как есть, без парсинга
         return value;
       }),

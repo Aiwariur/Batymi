@@ -61,6 +61,25 @@ describe("crm schemas", () => {
     expect(parsed.flats[0].is_active).toBe(true);
   });
 
+  it("normalizes amenity dict options from CRM into a list of keys", () => {
+    const parsed = listingsResponseSchema.parse({
+      flats: [
+        {
+          ...listingPayload,
+          options: { wifi: true, furniture: true, dishwasher: false, balcony: "есть" },
+        },
+      ],
+    });
+    expect(parsed.flats[0].options).toEqual(["wifi", "furniture", "balcony: есть"]);
+  });
+
+  it("stringifies object items inside options arrays", () => {
+    const parsed = listingsResponseSchema.parse({
+      flats: [{ ...listingPayload, options: [{ name: "wifi", value: true }, "terrace"] }],
+    });
+    expect(parsed.flats[0].options).toEqual([JSON.stringify({ name: "wifi", value: true }), "terrace"]);
+  });
+
   it("parses the rental-terms update response", () => {
     const parsed = rentalTermsResponseSchema.parse({
       success: true,
