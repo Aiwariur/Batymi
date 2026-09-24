@@ -75,23 +75,21 @@ const decimalString = z.preprocess((value) => {
  */
 export const rentalTermsDataSchema = z
   .object({
-    price: intRange(0, 2_147_483_647).optional(),
+    // A zero price is not a usable long-term rent offer. Do not let an LLM
+    // overwrite a real CRM price with a placeholder value.
+    price: intRange(1, 2_147_483_647).optional(),
     currency: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() : v), z.string().regex(/^[A-Z]{3}$/)).optional(),
     deposit_amount: intRange(0, 2_147_483_647).optional(),
     prepayment_months: intRange(0, 120).optional(),
     minimum_lease_months: intRange(1, 120).optional(),
     availability_status: z.preprocess(lower, z.enum(["unknown", "available", "reserved", "rented", "withdrawn"])).optional(),
-    available_from: z.string().optional(),
+    // Dates from natural language are not normalized here. Store phrases such
+    // as "с октября" in lease_terms_notes instead of writing an invalid date.
     lease_terms_notes: z.string().optional(),
     commission_type: z.preprocess(lower, z.enum(["fixed", "percent_month", "months"])).optional(),
     commission_value: decimalString.optional(),
     commission_payer: z.preprocess(lower, z.enum(["owner", "tenant", "split", "unknown"])).optional(),
     commission_notes: z.string().optional(),
-    publication_consent: z.preprocess((v) => {
-      if (v === "true" || v === 1 || v === "1") return true;
-      if (v === "false" || v === 0 || v === "0") return false;
-      return v;
-    }, z.boolean()).optional(),
   })
   .strict();
 

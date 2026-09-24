@@ -34,23 +34,25 @@ const listingPayload = {
     commission_type: null,
     commission_value: null,
     commission_payer: "unknown",
-    publication_consent: null,
   },
 };
 
 describe("crm schemas", () => {
-  it("parses the /flat/by-phone response with nested rental_terms", () => {
+  it("parses nested rental terms without retaining unsupported fields", () => {
     const parsed = listingsResponseSchema.parse({
       success: true,
       count: 1,
-      flats: [listingPayload],
+      flats: [{
+        ...listingPayload,
+        rental_terms: { ...listingPayload.rental_terms, publication_consent: true },
+      }],
     });
     const listing = parsed.flats[0];
     expect(listing.id).toBe(101);
     expect(listing.crm_status).toBe("delivered");
     expect(listing.rental_terms?.transaction_type).toBe("rent_long_term");
     expect(listing.rental_terms?.price_period).toBe("month");
-    expect(listing.rental_terms?.publication_consent).toBeNull();
+    expect(listing.rental_terms).not.toHaveProperty("publication_consent");
   });
 
   it("coerces numeric field types coming from the legacy dict", () => {

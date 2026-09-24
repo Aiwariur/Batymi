@@ -49,7 +49,7 @@ const hasText = (value: string | undefined): value is string =>
  * Проверяется по «склеенному» состоянию: CRM-данные + поля, которые LLM
  * пишет этими же действиями (update_deal_info / update_rental_terms).
  *
- * Комиссия, вид из окон, ЖК, кадастровый номер и publication_consent в гейт
+ * Комиссия, вид из окон, ЖК и кадастровый номер в гейт
  * сознательно НЕ входят: публикация их не требует, а диалог не должен
  * упираться в один неназванный ответ — недостающее агент фиксирует в
  * agent_notes, остальное доденет менеджер.
@@ -287,6 +287,10 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
         }
         if (ctx.phase === "primary" && status === "qualified") {
           reject(action, "qualified_not_in_primary_phase");
+          break;
+        }
+        if (ctx.phase === "agreed" && status === "agreed") {
+          reject(action, "status_already_agreed");
           break;
         }
         const target = resolveListingId(statusAction.listingId, ctx, listingIds);

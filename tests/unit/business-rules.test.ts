@@ -203,7 +203,7 @@ describe("executeActions", () => {
     expect(crm.calls[0]).toBe('deal:101:{"complex_name":"нет ЖК"}');
   });
 
-  it("stamps publication_consent automatically when moving to agreed", async () => {
+  it("does not write extra rental terms when moving to agreed", async () => {
     const crm = makeCrm();
     await executeActions([{ type: "set_crm_status", status: "agreed", listingId: 101 }], {
       crm,
@@ -212,40 +212,9 @@ describe("executeActions", () => {
       phone: "+995555123456",
       primaryListingId: 101,
     });
-    expect(crm.calls).toContain('rental:101:{"publication_consent":true}');
+    expect(crm.calls.filter((c) => c.startsWith("rental:"))).toEqual([]);
     expect(crm.calls).toContain("status:101:agreed");
     expect(crm.setStatus).toHaveBeenCalledWith(101, "agreed", { suppressTelegram: true });
   });
 
-  it("keeps an explicit consent write instead of the automatic one", async () => {
-    const crm = makeCrm();
-    await executeActions(
-      [
-        { type: "update_rental_terms", listingId: 101, data: { publication_consent: false } },
-        { type: "set_crm_status", status: "agreed", listingId: 101 },
-      ],
-      {
-        crm,
-        logger,
-        debug: new InMemoryDebugRecorder(),
-        phone: "+995555123456",
-        primaryListingId: 101,
-      },
-    );
-    expect(crm.calls.filter((c) => c.startsWith("rental:"))).toEqual([
-      'rental:101:{"publication_consent":false}',
-    ]);
-  });
-
-  it("does not stamp consent on other statuses", async () => {
-    const crm = makeCrm();
-    await executeActions([{ type: "set_crm_status", status: "disagreed", listingId: 101 }], {
-      crm,
-      logger,
-      debug: new InMemoryDebugRecorder(),
-      phone: "+995555123456",
-      primaryListingId: 101,
-    });
-    expect(crm.calls.filter((c) => c.startsWith("rental:"))).toEqual([]);
-  });
 });

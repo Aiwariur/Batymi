@@ -34,9 +34,7 @@ export const rentalTermsSchema = z
     commission_value: optionalString,
     commission_payer: optionalString,
     commission_notes: optionalString,
-    publication_consent: optionalBool,
-  })
-  .passthrough();
+  });
 
 export const listingSchema = z
   .object({

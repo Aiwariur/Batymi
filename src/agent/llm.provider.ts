@@ -87,7 +87,6 @@ const LEASE_MONTHS_RE = /(?:на|минимум|сроком)[^\d]{0,10}(\d{1,2}
 const WINDOW_RE = /(море|гор(?:а|ы|а)|двор|улиц[аы])/i;
 const CADASTRAL_RE = /(?:кадастр[^\d]{0,15})?(\d{2}[.,]\d{2}[.,]\d{2}(?:[.,]\d+)*)/i;
 const COMPLEX_RE = /(orbi(?:\s+city)?|batumi\s+towers|blue\s+ocean|жк\s+([a-zа-яё\s-]{2,30}))/i;
-const CONSENT_RE = /(публику|размеща|выкладывай|объявлен)/i;
 const AVAILABLE_RE = /(свободн|доступн|сдаёт|сдает)/i;
 
 function detectPhase(system: string): "primary" | "agreed" | "qualified" {
@@ -105,7 +104,7 @@ function mockResult(text: string, system: string): string {
     actions.push({ type: "set_contact_type", contactType: "realtor" });
     return JSON.stringify({
       reply:
-        "Понял, спасибо. Мы работаем только напрямую с собственниками, поэтому не буду продолжать автоматическое предложение по этому контакту.",
+        "Спасибо за уточнение. Мы работаем только с собственниками. Хорошего дня!",
       actions,
       stopConversation: true,
     });
@@ -136,7 +135,6 @@ function mockResult(text: string, system: string): string {
     rental.minimum_lease_months = leaseMatch[2].toLowerCase() === "год" ? 12 : Number(leaseMatch[1]);
   }
   if (AVAILABLE_RE.test(lower)) rental.availability_status = "available";
-  if (CONSENT_RE.test(lower)) rental.publication_consent = true;
   if (/\d+\s*%/.test(text) && /комисс/i.test(lower)) {
     rental.commission_type = "percent_month";
     rental.commission_value = (text.match(/(\d+)\s*%/)?.[1] ?? "") + "%";

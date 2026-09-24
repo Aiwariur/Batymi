@@ -34,22 +34,6 @@ export function matchComplex(
   );
 }
 
-/** Явная запись publication_consent по этому листингу в этом же пакете действий. */
-function hasExplicitConsentWrite(
-  actions: AgentAction[],
-  listingId: string | number,
-  primaryListingId: string | number | null,
-): boolean {
-  return actions.some((action) => {
-    if (action.type !== "update_rental_terms") return false;
-    const target = action.listingId ?? primaryListingId;
-    if (target === null || target === undefined || String(target) !== String(listingId)) {
-      return false;
-    }
-    return (action.data as Record<string, unknown>).publication_consent !== undefined;
-  });
-}
-
 export async function executeActions(
   actions: AgentAction[],
   ctx: ActionExecutorContext,
@@ -118,26 +102,6 @@ export async function executeActions(
         if (listingId === null || listingId === undefined) {
           ctx.logger.error("action.set_crm_status.no_listing");
           break;
-        }
-        // Согласие на сотрудничество покрывает публикацию объявления: разрешение
-        // у собственника не запрашивается, движок отмечает его сам при agreed
-        // (если агент в этом же пакете не записал явное true/false).
-        if (action.status === "agreed" && !hasExplicitConsentWrite(actions, listingId, ctx.primaryListingId)) {
-          try {
-            await ctx.crm.updateRentalTerms(ctx.phone, listingId, { publication_consent: true });
-            ctx.debug.recordCrmAction("update_rental_terms", {
-              phone: ctx.phone,
-              listingId,
-              data: { publication_consent: true },
-              auto: "consent_on_agreed",
-            });
-            ctx.logger.info({ listingId }, "action.publication_consent.auto_on_agreed");
-          } catch (error) {
-            ctx.logger.warn(
-              { err: (error as Error).message },
-              "action.publication_consent.auto_failed",
-            );
-          }
         }
         // Batymi's agreed transition starts phase 2 collection.  Suppress
         // CRM's legacy auto-publication hook for this request; operators and

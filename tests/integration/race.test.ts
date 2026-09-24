@@ -67,6 +67,7 @@ describe("same-conversation race", () => {
     expect(outcomes.some((o) => o.status === "processed")).toBe(true);
     expect(harness.llm.calls.length).toBe(2);
     expect(harness.llm.lastUserText(1)).toContain("batch B");
-    expect(harness.debug.snapshot().outgoing.map((m) => m.message)).toEqual(["batch A", "batch B"]);
+    const replies = harness.debug.snapshot().outgoing.map((m) => m.message);
+    expect(replies).toEqual(["batch A", "batch B"]);
   });
 });

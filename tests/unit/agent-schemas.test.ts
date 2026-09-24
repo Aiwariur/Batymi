@@ -24,7 +24,7 @@ describe("agent action schemas", () => {
       actionSchema.safeParse({
         type: "update_rental_terms",
         listingId: 101,
-        data: { price: 900, currency: "usd", publication_consent: true },
+        data: { price: 900, currency: "usd" },
       }).success,
     ).toBe(true);
     expect(
@@ -36,6 +36,14 @@ describe("agent action schemas", () => {
     expect(
       actionSchema.safeParse({ type: "send_http_request", url: "https://x" }).success,
     ).toBe(false);
+  });
+
+  it("rejects unsupported rental fields", () => {
+    expect(actionSchema.safeParse({
+      type: "update_rental_terms",
+      listingId: 101,
+      data: { publication_consent: true },
+    }).success).toBe(false);
   });
 
   it("rejects statuses the agent must not set", () => {
@@ -75,6 +83,11 @@ describe("agent action schemas", () => {
     expect(rentalTermsDataSchema.safeParse({ commission_type: "percent_month" }).success).toBe(true);
     expect(rentalTermsDataSchema.safeParse({ availability_status: "available" }).success).toBe(true);
     expect(rentalTermsDataSchema.safeParse({ availability_status: "free" }).success).toBe(false);
+  });
+
+  it("rejects placeholder rent prices and unnormalized availability dates", () => {
+    expect(rentalTermsDataSchema.safeParse({ price: 0 }).success).toBe(false);
+    expect(rentalTermsDataSchema.safeParse({ available_from: "с октября" }).success).toBe(false);
   });
 
   it("bounds lease months", () => {

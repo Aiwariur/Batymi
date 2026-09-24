@@ -33,7 +33,8 @@ describe("concurrency", () => {
     const outgoing = harness.debug.snapshot().outgoing;
     expect(outgoing).toHaveLength(50);
     for (const message of outgoing) {
-      expect(message.message).toBe(expected.get(`${message.instanceId}:${message.chatId}`));
+      const original = expected.get(`${message.instanceId}:${message.chatId}`)!;
+      expect(message.message).toBe(original);
     }
   });
 });

@@ -277,7 +277,6 @@ function mockListing(id: number, overrides: Partial<MockListingState> = {}): Moc
       commission_value: null,
       commission_payer: "unknown",
       commission_notes: null,
-      publication_consent: null,
     },
     ...overrides,
   };

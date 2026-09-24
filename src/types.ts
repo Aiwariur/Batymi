@@ -75,7 +75,6 @@ export interface RentalTerms {
   commission_value?: string | null;
   commission_payer?: string | null;
   commission_notes?: string | null;
-  publication_consent?: boolean | null;
 }
 
 /** Payload для POST /api/contacts/<phone>/listings/<id>/rental-terms. */
@@ -92,7 +91,6 @@ export interface RentalTermsUpdate {
   commission_value?: string;
   commission_payer?: RentalCommissionPayer;
   commission_notes?: string;
-  publication_consent?: boolean;
 }
 
 /** Payload для POST /api/contacts/<phone>/deal (объектные поля листинга). */

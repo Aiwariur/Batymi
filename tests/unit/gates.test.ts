@@ -19,7 +19,6 @@ const baseListing = (overrides: Partial<Listing> = {}): Listing => ({
     availability_status: "unknown",
     minimum_lease_months: null,
     commission_type: null,
-    publication_consent: null,
   },
   ...overrides,
 });
@@ -48,6 +47,20 @@ describe("status gates", () => {
       ctx([baseListing()]),
     );
     expect(result.rejected[0]?.reason).toBe("qualified_not_in_primary_phase");
+  });
+
+  it("does not allow status to regress or repeat after cooperation was agreed", () => {
+    const result = applyGates(
+      [
+        { type: "set_crm_status", status: "agreed" },
+        { type: "set_crm_status", status: "disagreed" },
+      ],
+      ctx([baseListing({ crm_status: "agreed" })], "agreed"),
+    );
+    expect(result.allowed.map((action) => action.type === "set_crm_status" && action.status)).toEqual(["disagreed"]);
+    expect(result.rejected).toEqual([
+      expect.objectContaining({ reason: "status_already_agreed" }),
+    ]);
   });
 
   it("rejects every action in a qualified dialog", () => {
@@ -86,7 +99,6 @@ describe("qualified completeness gate", () => {
     expect(missing).not.toContain("window_view");
     expect(missing).not.toContain("complex_name");
     expect(missing).not.toContain("cadastral_code");
-    expect(missing).not.toContain("rental_terms.publication_consent");
   });
 
   it("does not treat non-positive price or lease as complete", () => {
@@ -196,12 +208,12 @@ describe("qualified completeness gate", () => {
     ]);
   });
 
-  it("qualifies without cadastral code, consent, commission, window view and complex", () => {
+  it("qualifies without cadastral code, commission, window view and complex", () => {
     const listing = baseListing({
       window_view: null,
       complex_name: null,
       cadastral_code: null,
-      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, publication_consent: null, commission_type: null },
+      rental_terms: { ...baseListing().rental_terms!, ...completeTerms, commission_type: null },
     });
     const result = applyGates([{ type: "set_crm_status", status: "qualified" }], ctx([listing], "agreed"));
     expect(result.rejected).toHaveLength(0);
