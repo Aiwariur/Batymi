@@ -312,6 +312,12 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
   );
   const finalized: AgentAction[] = [];
   for (const action of allowed) {
+    if (action.type === "set_crm_status" && acceptedWrites.some(
+      write => write.type === "update_rental_terms" && write.data.availability_status === "rented",
+    )) {
+      reject(action, "rented_dialog_closed");
+      continue;
+    }
     if (action.type !== "set_crm_status" || action.status !== "qualified") {
       finalized.push(action);
       continue;

@@ -426,6 +426,7 @@ export class MockCrmClient implements CrmClient {
       return;
     }
     listing.rental = { ...listing.rental, ...data, listing_id: listing.id };
+    if (data.availability_status === "rented") state.status = "listing_removed";
     this.debug.recordCrmAction("update_rental_terms", { phone, listingId, data });
     this.logger.debug({ phone, listingId }, "crm.mock.updateRentalTerms");
   }

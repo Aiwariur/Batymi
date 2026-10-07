@@ -30,6 +30,14 @@ const ctx = (listings: Listing[], phase: "primary" | "agreed" | "qualified" = "p
 });
 
 describe("status gates", () => {
+  it("does not overwrite the removed status after a rented write", () => {
+    const result = applyGates([
+      { type: "update_rental_terms", listingId: 101, data: { availability_status: "rented" } },
+      { type: "set_crm_status", status: "disagreed", listingId: 101 },
+    ], ctx([baseListing()]));
+    expect(result.allowed.map(action => action.type)).toEqual(["update_rental_terms"]);
+    expect(result.rejected[0]?.reason).toBe("rented_dialog_closed");
+  });
   it("rejects statuses that only the CRM itself may set", () => {
     for (const status of ["sent", "new", "sold", "archived", "no_whatsapp"]) {
       const result = applyGates(

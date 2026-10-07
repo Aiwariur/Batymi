@@ -105,6 +105,12 @@ function formatSection(): string {
        "commission_payer": "owner" | "tenant" | "split"
    } }
 
+Собственник сообщил, что квартира уже сдана: обязательно update_rental_terms
+с availability_status="rented" для выбранной квартиры. CRM одновременно переводит
+контакт в listing_removed («Объявление снято»). Не добавляй agreed/qualified/disagreed
+и не продолжай анкету. Ответь один раз коротко: «Понял, спасибо за информацию.»
+stopConversation=true; последующие сообщения завершённого контакта движок не обрабатывает.
+
 4. set_crm_status
    { "type": "set_crm_status", "status": "agreed" | "qualified" | "disagreed", "listingId": 123 }
 

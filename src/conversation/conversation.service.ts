@@ -83,8 +83,9 @@ function managerAllowedForAgent(listing: Listing, allowedManagerIds: number[]): 
 
 export function isTerminalListing(listing: Listing, terminalStatuses: string[]): boolean {
   const status = (listing.crm_status ?? "").toLowerCase();
-  if (terminalStatuses.includes(status)) return true;
+  if (status === "listing_removed" || terminalStatuses.includes(status)) return true;
   if ((listing.contact_type ?? "").toLowerCase() === "realtor") return true;
+  if (listing.rental_terms?.availability_status === "rented") return true;
   return false;
 }
 
@@ -647,6 +648,9 @@ export function finalizeAgentResponse(input: GuardAgentResponseInput) {
     }
     if (corrections.length > 0) reply = `Исправил: ${corrections.join(", ")}. ${reply}`.trim();
   }
+  if (gate.allowed.some(action =>
+    action.type === "update_rental_terms" && action.data.availability_status === "rented",
+  )) stopConversation = true;
   return { gate, reply, stopConversation };
 }
 
