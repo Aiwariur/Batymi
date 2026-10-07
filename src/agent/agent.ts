@@ -1,155 +1,48 @@
 import { HistoryEntry } from "../types";
 import { Logger } from "../observability/logger";
 import { ChatMessage, LlmProvider } from "./llm.provider";
-import { AgentResult, actionSchema, agentResultSchema, rentalTermsDataSchema } from "./schemas";
+import { AgentResult, agentResultSchema } from "./schemas";
 
 export class AgentOutputError extends Error {
-  constructor(message: string, readonly raw: string) {
-    super(message);
-    this.name = "AgentOutputError";
-  }
+  constructor(message: string, readonly raw: string) { super(message); this.name = "AgentOutputError"; }
 }
-
-interface ParsedAgentResult {
-  result: AgentResult;
-  discardedActions: number;
-  discardedFields: string[];
-}
-
-function tryParseAgentResult(raw: string): ParsedAgentResult | null {
-  let text = raw.trim();
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence?.[1]) text = fence[1].trim();
-
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    text = text.slice(firstBrace, lastBrace + 1);
-  }
-
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  const parsed = agentResultSchema.safeParse(json);
-  if (parsed.success) return { result: parsed.data, discardedActions: 0, discardedFields: [] };
-
-  // One unsupported field (often a guessed commission enum) should not throw
-  // away independently valid owner facts from the same JSON response.
-  if (!json || typeof json !== "object" || Array.isArray(json)) return null;
-  const object = json as Record<string, unknown>;
-  const reply = typeof object.reply === "string" ? object.reply : "";
-  const stopConversation = typeof object.stopConversation === "boolean" ? object.stopConversation : false;
-  if (!Array.isArray(object.actions)) return null;
-  const actions: AgentResult["actions"] = [];
-  const discardedFields: string[] = [];
-  let discardedActions = 0;
-  for (const candidate of object.actions) {
-    const valid = actionSchema.safeParse(candidate);
-    if (valid.success) {
-      actions.push(valid.data);
-      continue;
-    }
-    if (
-      candidate && typeof candidate === "object" &&
-      (candidate as Record<string, unknown>).type === "update_rental_terms" &&
-      (candidate as Record<string, unknown>).data && typeof (candidate as Record<string, unknown>).data === "object"
-    ) {
-      const source = (candidate as { data: Record<string, unknown> }).data;
-      const safeData: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(source)) {
-        const field = rentalTermsDataSchema.safeParse({ [key]: value });
-        if (field.success) safeData[key] = (field.data as Record<string, unknown>)[key];
-        else discardedFields.push(key);
-      }
-      const salvaged = actionSchema.safeParse({ ...(candidate as object), data: safeData });
-      if (salvaged.success) {
-        actions.push(salvaged.data);
-        continue;
-      }
-    }
-    discardedActions += 1;
-  }
-  return {
-    result: { reply, actions, stopConversation },
-    discardedActions,
-    discardedFields,
-  };
-}
-
 export interface RunAgentInput {
   systemPrompt: string;
   history: HistoryEntry[];
   batchText: string;
+  feedback?: unknown;
+  previousRaw?: string;
+  executionResults?: unknown;
+  allowRepair?: boolean;
+  onRaw?: (raw: string) => Promise<void>;
 }
+export interface RunAgentOutput { result: AgentResult; raw: string; repaired: boolean }
 
-export interface RunAgentOutput {
-  result: AgentResult;
-  raw: string;
-}
-
-export async function runAgent(
-  llm: LlmProvider,
-  logger: Logger,
-  input: RunAgentInput,
-): Promise<RunAgentOutput> {
+export async function runAgent(llm: LlmProvider, logger: Logger, input: RunAgentInput): Promise<RunAgentOutput> {
+  const final = input.executionResults !== undefined;
   const messages: ChatMessage[] = [
     { role: "system", content: input.systemPrompt },
-    ...input.history.map((entry) => ({ role: entry.role, content: entry.content })),
+    ...input.history.map(entry => ({ role: entry.role, content: entry.content })),
     { role: "user", content: input.batchText },
   ];
-
-  const startedAt = Date.now();
-  logger.info("llm.started");
-  let raw = await llm.complete(messages);
-  let parsed = tryParseAgentResult(raw);
-
-  if (parsed && (parsed.discardedActions > 0 || parsed.discardedFields.length > 0)) {
-    logger.warn(
-      { discardedActions: parsed.discardedActions, discardedFields: parsed.discardedFields },
-      "llm.partial_output.salvaged",
-    );
-  }
-
-  if (!parsed) {
-    logger.warn({ rawPreview: raw.slice(0, 300) }, "llm.invalid_output.retry");
-    const repairMessages: ChatMessage[] = [
-      ...messages,
-      { role: "assistant", content: raw },
-      {
-        role: "user",
-        content:
-          'Твой предыдущий ответ не соответствует формату. Верни СТРОГО валидный JSON вида {"reply": string, "actions": [...], "stopConversation": boolean} без markdown.',
-      },
-    ];
-    raw = await llm.complete(repairMessages);
-    parsed = tryParseAgentResult(raw);
-    if (parsed && (parsed.discardedActions > 0 || parsed.discardedFields.length > 0)) {
-      logger.warn(
-        { discardedActions: parsed.discardedActions, discardedFields: parsed.discardedFields },
-        "llm.partial_output.salvaged_after_retry",
-      );
-    }
-    if (!parsed) {
-      logger.error({ rawPreview: raw.slice(0, 300) }, "llm.invalid_output.fallback");
-      const language = /[\u10a0-\u10ff]/.test(input.batchText)
-        ? "ka"
-        : /[А-Яа-яЁё]/.test(input.batchText)
-          ? "ru"
-          : /\b(da+|mozhno|mozhna|sobstvennik|sotrudnich|god|vid)\b/i.test(input.batchText)
-            ? "ru"
-            : "en";
-      const reply = language === "ru"
-        ? "Извините, я не уверен, что правильно понял. Уточните, пожалуйста, ваш ответ?"
-        : language === "ka"
-          ? "ბოდიშს გიხდით, დარწმუნებული არ ვარ, სწორად გავიგე თუ არა. გთხოვთ, დააზუსტოთ თქვენი პასუხი?"
-          : "Sorry, I am not sure I understood correctly. Could you please clarify your answer?";
-      parsed = { result: { reply, actions: [], stopConversation: false }, discardedActions: 0, discardedFields: [] };
+  if (input.previousRaw !== undefined) messages.push({ role: "assistant", content: input.previousRaw });
+  if (input.feedback !== undefined) messages.push({ role: "system", content: "ACTION_VALIDATION_ERROR: " + JSON.stringify(input.feedback) + ". Исправь предыдущий план. Записи ещё не выполнялись. Сохрани валидные факты и selectedListingId предыдущего плана; каждый адресованный action сам по себе не заменяет обязательный selectedListingId результата." });
+  if (final) messages.push({ role: "system", content: "CRM_EXECUTION_RESULTS: " + JSON.stringify(input.executionResults) + ". Все перечисленные действия уже выполнены. Дай окончательный короткий ответ собственнику, actions строго [], не повторяй действия. Учитывай обновлённый CRM и исходное сообщение. Сохрани язык и письменность proposedReply, если они соответствуют последнему user: русский транслит должен остаться транслитом, английский — английским, грузинский — грузинским. Язык этой инструкции и прошлых сообщений не задаёт язык ответа. После qualified — короткая благодарность без нового вопроса, stopConversation=true. В тексте собственнику не называй внутренние статусы/CRM/квалификацию заявки и не утверждай передачу менеджеру или клиентам без такого действия; подтверди только сохранённые условия. При незавершённом разговоре задай один следующий вопрос ровно один раз: не дублируй вопрос из proposedReply и не склеивай проект с новой версией ответа." });
+  let raw = "";
+  for (let attempt = 0; attempt < (input.allowRepair === false ? 1 : 2); attempt++) {
+    raw = await llm.complete(messages);
+    await input.onRaw?.(raw);
+    try {
+      const result = agentResultSchema.parse(JSON.parse(raw.trim()));
+      if (final && result.actions.length > 0) throw new Error("final_response_actions_must_be_empty");
+      if (result.actions.length === 0 && !result.reply.trim()) throw new Error("empty final reply");
+      logger.info({ actions: result.actions.length, final }, "llm.completed");
+      return { result, raw, repaired: attempt > 0 };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "invalid JSON";
+      logger.warn({ attempt, final }, "llm.invalid_output");
+      messages.push({ role: "assistant", content: raw }, { role: "system", content: "Ошибка формата: " + reason + '. Верни только JSON {"reply":string,"actions":[],"stopConversation":boolean} с допустимыми действиями из схемы. ' + (final ? "actions должны быть пустыми." : "") });
     }
   }
-
-  logger.info({ duration: Date.now() - startedAt, actions: parsed.result.actions.length }, "llm.completed");
-  return { result: parsed.result, raw };
+  throw new AgentOutputError("model output invalid after bounded repair", raw);
 }

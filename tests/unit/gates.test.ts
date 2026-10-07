@@ -14,7 +14,6 @@ const baseListing = (overrides: Partial<Listing> = {}): Listing => ({
     listing_id: 101,
     price: 900,
     currency: "USD",
-    transaction_type: "rent_long_term",
     price_period: "month",
     availability_status: "unknown",
     minimum_lease_months: null,
@@ -23,10 +22,17 @@ const baseListing = (overrides: Partial<Listing> = {}): Listing => ({
   ...overrides,
 });
 
-const ctx = (listings: Listing[], phase: "primary" | "agreed" | "qualified" = "primary") => ({
+const ctx = (
+  listings: Listing[],
+  phase: "primary" | "agreed" | "qualified" = "primary",
+  selectedListingId?: string | number,
+  contactListingCount?: number,
+) => ({
   listings,
   primaryListingId: listings[0].id,
   phase,
+  selectedListingId,
+  contactListingCount,
 });
 
 describe("status gates", () => {
@@ -37,6 +43,13 @@ describe("status gates", () => {
     ], ctx([baseListing()]));
     expect(result.allowed.map(action => action.type)).toEqual(["update_rental_terms"]);
     expect(result.rejected[0]?.reason).toBe("rented_dialog_closed");
+  });
+  it("requires selection even if a manager filter left only one visible listing", () => {
+    const result = applyGates([{ type: "update_rental_terms", data: { price: 850 } }], {
+      ...ctx([baseListing()]), contactListingCount: 2,
+    });
+    expect(result.allowed).toEqual([]);
+    expect(result.rejected[0].reason).toBe("listing_selection_required");
   });
   it("rejects statuses that only the CRM itself may set", () => {
     for (const status of ["sent", "new", "sold", "archived", "no_whatsapp"]) {
@@ -49,12 +62,21 @@ describe("status gates", () => {
     }
   });
 
-  it("rejects qualified in the primary phase", () => {
+  it("qualifies in primary when the same batch confirms owner, cooperation and rental terms", () => {
     const result = applyGates(
-      [{ type: "set_crm_status", status: "qualified" }],
+      [
+        { type: "set_contact_type", contactType: "owner" },
+        { type: "update_rental_terms", data: { availability_status: "available", minimum_lease_months: 12 } },
+        { type: "set_crm_status", status: "agreed" },
+        { type: "set_crm_status", status: "qualified" },
+      ],
       ctx([baseListing()]),
     );
-    expect(result.rejected[0]?.reason).toBe("qualified_not_in_primary_phase");
+    expect(result.rejected).toHaveLength(0);
+    expect(result.allowed.map((action) => action.type)).toEqual([
+      "set_contact_type", "update_rental_terms", "set_crm_status", "set_crm_status",
+    ]);
+    expect(result.allowed.at(-1)).toMatchObject({ type: "set_crm_status", status: "qualified" });
   });
 
   it("does not allow status to regress or repeat after cooperation was agreed", () => {
@@ -93,7 +115,6 @@ describe("qualified completeness gate", () => {
   const completeTerms = {
     price: 900,
     currency: "USD",
-    transaction_type: "rent_long_term",
     price_period: "month",
     availability_status: "available",
     minimum_lease_months: 12,
@@ -144,6 +165,8 @@ describe("qualified completeness gate", () => {
 
   it("rejects qualified while essentials are missing", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       complex_name: "Orbi City",
       window_view: "море",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
@@ -155,6 +178,8 @@ describe("qualified completeness gate", () => {
 
   it("accepts qualified while window view is still unknown", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       window_view: null,
       complex_name: "Orbi City",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms },
@@ -165,6 +190,8 @@ describe("qualified completeness gate", () => {
 
   it("accepts qualified when the same batch fills the missing fields", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       complex_name: "Orbi City",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
@@ -179,8 +206,35 @@ describe("qualified completeness gate", () => {
     expect(result.rejected).toHaveLength(0);
   });
 
+  it("accepts a future availability note only with an explicit future basis", () => {
+    const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
+      rental_terms: {
+        ...baseListing().rental_terms!,
+        ...completeTerms,
+        availability_status: "unknown",
+        available_from: null,
+        lease_terms_notes: "Освободится в декабре",
+      },
+    });
+    const withoutBasis = applyGates(
+      [{ type: "set_crm_status", status: "qualified" }],
+      ctx([listing], "agreed"),
+    );
+    const withBasis = applyGates(
+      [{ type: "set_crm_status", status: "qualified", availabilityBasis: "future" }],
+      ctx([listing], "agreed"),
+    );
+
+    expect(withoutBasis.rejected[0]?.reason).toContain("qualified_incomplete:rental_terms.availability_status");
+    expect(withBasis.rejected).toHaveLength(0);
+  });
+
   it("does not let an unscoped or rejected write satisfy qualified", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       complex_name: "Orbi City",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
@@ -200,6 +254,8 @@ describe("qualified completeness gate", () => {
 
   it("moves qualified after accepted writes even when the model orders it first", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       complex_name: "Orbi City",
       rental_terms: { ...baseListing().rental_terms!, ...completeTerms, availability_status: "unknown" },
     });
@@ -218,6 +274,8 @@ describe("qualified completeness gate", () => {
 
   it("qualifies without cadastral code, commission, window view and complex", () => {
     const listing = baseListing({
+      crm_status: "agreed",
+      contact_type: "owner",
       window_view: null,
       complex_name: null,
       cadastral_code: null,
@@ -229,28 +287,63 @@ describe("qualified completeness gate", () => {
 });
 
 describe("listing addressing gates", () => {
-  it("requires an explicit listingId when the contact has several listings", () => {
+  it("requires listing selection when the contact has several listings", () => {
     const result = applyGates(
       [{ type: "update_rental_terms", data: { price: 950 } }],
       ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
     );
-    expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");
+    expect(result.rejected[0]?.reason).toBe("listing_selection_required");
   });
 
-  it("requires an explicit listingId for deal info with several listings", () => {
+  it("requires GateContext.selectedListingId before any multi-listing write", () => {
+    const result = applyGates(
+      [{ type: "update_rental_terms", listingId: 101, data: { price: 950 } }],
+      ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("listing_selection_required");
+  });
+
+  it("requires the action to target the selected listing", () => {
+    const result = applyGates(
+      [{ type: "update_rental_terms", listingId: 102, data: { price: 950 } }],
+      ctx([baseListing({ id: 101 }), baseListing({ id: 102 })], "primary", 101),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe("action_targets_unselected_listing");
+  });
+
+  it("rejects unselected contact deal info when several listings exist", () => {
     const result = applyGates(
       [{ type: "update_deal_info", data: { window_view: "море" } }],
       ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
     );
-    expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");
+    expect(result.rejected[0]?.reason).toBe("listing_selection_required");
   });
 
-  it("requires an explicit listingId for contact status with several listings", () => {
+  it("rejects unselected contact status when several listings exist", () => {
     const result = applyGates(
       [{ type: "set_crm_status", status: "agreed" }],
       ctx([baseListing({ id: 101 }), baseListing({ id: 102 })]),
     );
-    expect(result.rejected[0]?.reason).toBe("listing_id_required_for_multiple_listings");
+    expect(result.rejected[0]?.reason).toBe("listing_selection_required");
+  });
+
+  it("never qualifies when the contact has multiple listings, even after selecting one", () => {
+    const complete = {
+      price: 900,
+      currency: "USD",
+      price_period: "month",
+      availability_status: "available",
+      minimum_lease_months: 12,
+    };
+    const selected = baseListing({ id: 101, crm_status: "agreed", contact_type: "owner", rental_terms: { ...baseListing().rental_terms!, ...complete } });
+    const result = applyGates(
+      [{ type: "set_crm_status", status: "qualified", listingId: 101 }],
+      ctx([selected], "agreed", 101, 2),
+    );
+    expect(result.allowed).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toContain("qualified_incomplete:multi_listing_scope_requires_manager");
   });
 
   it("defaults to the primary listing when there is only one", () => {

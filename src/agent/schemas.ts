@@ -51,7 +51,7 @@ export const dealInfoSchema = z.object({
   cadastral_code: z.string().optional(),
   complex_name: z.string().optional(),
   agent_notes: z.string().optional(),
-});
+}).strict();
 
 const coerceNum = (value: unknown) => {
   if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
@@ -71,7 +71,7 @@ const decimalString = z.preprocess((value) => {
 /**
  * Арендные условия листинга. Семантика эндпоинта CRM: отсутствующее/пустое
  * поле — no-op, поэтому LLM передаёт только то, что реально назвал собственник.
- * transaction_type/price_period движок не пишет — их доказывают парсеры.
+ * price_period могут подтверждаться собственником через модель.
  */
 export const rentalTermsDataSchema = z
   .object({
@@ -79,6 +79,11 @@ export const rentalTermsDataSchema = z
     // overwrite a real CRM price with a placeholder value.
     price: intRange(1, 2_147_483_647).optional(),
     currency: z.preprocess((v) => (typeof v === "string" ? v.trim().toUpperCase() : v), z.string().regex(/^[A-Z]{3}$/)).optional(),
+    price_period: z.literal("month").optional(),
+    available_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+      const date = new Date(value + "T00:00:00Z");
+      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }, "invalid calendar date").optional(),
     deposit_amount: intRange(0, 2_147_483_647).optional(),
     prepayment_months: intRange(0, 120).optional(),
     minimum_lease_months: intRange(1, 120).optional(),
@@ -96,25 +101,26 @@ export const rentalTermsDataSchema = z
 export const setContactTypeActionSchema = z.object({
   type: z.literal("set_contact_type"),
   contactType: contactTypeSchema,
-});
+}).strict();
 
 export const updateDealInfoActionSchema = z.object({
   type: z.literal("update_deal_info"),
   listingId: z.union([z.string(), z.number()]).optional(),
   data: dealInfoSchema,
-});
+}).strict();
 
 export const updateRentalTermsActionSchema = z.object({
   type: z.literal("update_rental_terms"),
   listingId: z.union([z.string(), z.number()]).optional(),
   data: rentalTermsDataSchema,
-});
+}).strict();
 
 export const setCrmStatusActionSchema = z.object({
   type: z.literal("set_crm_status"),
   status: agentCrmStatusSchema,
   listingId: z.union([z.string(), z.number()]).optional(),
-});
+  availabilityBasis: z.literal("future").optional(),
+}).strict();
 
 export const actionSchema = z.discriminatedUnion("type", [
   setContactTypeActionSchema,
@@ -127,7 +133,8 @@ export const agentResultSchema = z.object({
   reply: z.string().default(""),
   actions: z.array(actionSchema).default([]),
   stopConversation: z.boolean().default(false),
-});
+  selectedListingId: z.union([z.string(), z.number()]).optional(),
+}).strict();
 
 export type AgentAction = z.infer<typeof actionSchema>;
 export type AgentResult = z.infer<typeof agentResultSchema>;

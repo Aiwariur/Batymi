@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+export const interactionsResponseSchema = z.object({
+  success: z.literal(true),
+  messages: z.array(z.object({
+    id: z.union([z.number(), z.string()]),
+    direction: z.enum(["incoming", "outgoing"]),
+    text: z.string(),
+    sender: z.string().nullable(),
+    sent_at: z.string().nullable(),
+    message_id: z.string().nullable().optional(),
+    instance_id: z.string().nullable().optional(),
+  })),
+});
+
 const optionalString = z
   .union([z.string(), z.number(), z.null()])
   .optional()
@@ -22,7 +35,6 @@ export const rentalTermsSchema = z
     listing_id: z.union([z.string(), z.number(), z.null()]).optional(),
     price: z.union([z.string(), z.number(), z.null()]).optional(),
     currency: optionalString,
-    transaction_type: optionalString,
     price_period: optionalString,
     deposit_amount: z.union([z.string(), z.number(), z.null()]).optional(),
     prepayment_months: z.union([z.string(), z.number(), z.null()]).optional(),

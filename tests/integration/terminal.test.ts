@@ -6,6 +6,7 @@ import { Listing } from "../../src/types";
 function stubCrm(listings: Listing[]): CrmClient {
   return {
     getListingsByPhone: vi.fn(async () => listings),
+    getInteractions: vi.fn(async () => []),
     setStatus: vi.fn(async () => undefined),
     setContactType: vi.fn(async () => undefined),
     updateDealInfo: vi.fn(async () => undefined),
@@ -32,9 +33,10 @@ describe("terminal and manager filtering", () => {
 
   it("saves already rented, closes the contact, and stays silent on thanks", async () => {
     const harness = createHarness();
-    harness.llm.responder = () => JSON.stringify({
+    harness.llm.responder = (messages) => JSON.stringify({
       reply: "Понял, спасибо за информацию.",
-      actions: [{ type: "update_rental_terms", data: { availability_status: "rented" } }],
+      actions: messages.some(message => message.content.startsWith("CRM_EXECUTION_RESULTS:"))
+        ? [] : [{ type: "update_rental_terms", data: { availability_status: "rented" } }],
       stopConversation: false,
     });
     const phone = "995555700005";
@@ -50,7 +52,7 @@ describe("terminal and manager filtering", () => {
     expect(listings[0].crm_status).toBe("listing_removed");
     await harness.ingest(message("Хорошо спасибо"));
     expect((await harness.scheduler.runAll())[0]?.status).toBe("terminal");
-    expect(harness.llm.calls).toHaveLength(1);
+    expect(harness.llm.calls).toHaveLength(2);
     expect(harness.debug.snapshot().outgoing).toHaveLength(1);
   });
 
@@ -105,24 +107,17 @@ describe("terminal and manager filtering", () => {
     }
   });
 
-  it("keeps replying to qualified contacts but blocks their actions", async () => {
-    const harness = createHarness();
+  it("stops qualified contacts even when the environment omits qualified", async () => {
+    const harness = createHarness({ TERMINAL_CRM_STATUSES: "disagreed,archived,no_whatsapp" });
     harness.services.crm = stubCrm([
       {
         id: 1,
         crm_status: "qualified",
         contact_type: "owner",
         assigned_manager_id: 2,
-        rental_terms: { transaction_type: "rent_long_term", price_period: "month" },
+        rental_terms: { price_period: "month" },
       },
     ]);
-    harness.llm.responder = () =>
-      JSON.stringify({
-        reply: "Да, квартира всё ещё в работе.",
-        actions: [{ type: "set_crm_status", status: "disagreed" }],
-        stopConversation: false,
-      });
-
     await harness.ingest(
       harness.makeMessage({
         instanceId: harness.config.instances[0].id,
@@ -132,10 +127,9 @@ describe("terminal and manager filtering", () => {
     );
     const outcomes = await harness.scheduler.runAll();
 
-    expect(outcomes[0]?.status).toBe("processed");
-    expect(harness.llm.calls).toHaveLength(1);
-    // Ответ ушёл, но действие CRM заблокировано гейтом qualified-фазы
-    expect(harness.debug.snapshot().outgoing).toHaveLength(1);
+    expect(outcomes[0]?.status).toBe("terminal");
+    expect(harness.llm.calls).toHaveLength(0);
+    expect(harness.debug.snapshot().outgoing).toHaveLength(0);
     expect(harness.debug.snapshot().crmActions).toHaveLength(0);
   });
 

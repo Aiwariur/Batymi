@@ -1,39 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { finalizeAgentResponse } from "../../src/conversation/conversation.service";
 import { AgentResult } from "../../src/agent/schemas";
+import { finalizeAgentResponse } from "../../src/conversation/conversation.service";
 import { baseListing } from "../conversations/scenarios";
-import { applyActions } from "../conversations/evaluate";
 
-describe("fragmented transliterated owner dialogue", () => {
-  it("keeps semantic model facts, asks what remains, and never replies with a receipt only", () => {
+describe("transliterated input response contract", () => {
+  it("keeps the model's transliterated-message facts without adding inferred fields", () => {
     const listing = structuredClone(baseListing);
-    const history: { role: "user" | "assistant"; content: string }[] = [
-      { role: "user", content: "Da aktualno" },
-      { role: "assistant", content: "Вы собственник? Какая цена в месяц, депозит и минимальный срок?" },
-    ];
-    const turns: { user: string; result: AgentResult }[] = [
-      { user: "Da ia sobstvenik, ia lana", result: {
-        reply: "Принял, Лана!", actions: [{ type: "set_contact_type", contactType: "owner" }], stopConversation: false,
-      } },
-      { user: "800$", result: {
-        reply: "Записал цену 800$.", actions: [{ type: "update_rental_terms", data: { price: 800, currency: "USD" } }], stopConversation: false,
-      } },
-      { user: "Minimalni 6 mesiacev", result: {
-        reply: "Записал минимальный срок 6 месяцев.", actions: [{ type: "update_rental_terms", data: { minimum_lease_months: 6 } }], stopConversation: false,
-      } },
-    ];
-    for (const turn of turns) {
-      const guarded = finalizeAgentResponse({ result: turn.result, phase: "primary", history,
-        batchText: turn.user, listings: [listing], primaryListing: listing });
-      applyActions(listing, guarded.gate.allowed);
-      expect(guarded.reply).toMatch(/сотрудничать/);
-      expect(guarded.reply).toContain("?");
-      expect(guarded.reply).not.toMatch(/принял|записал|вы собственник/i);
-      expect(guarded.stopConversation).toBe(false);
-      expect(listing.crm_status).toBe("delivered");
-      history.push({ role: "user", content: turn.user }, { role: "assistant", content: guarded.reply });
-    }
-    expect(listing.contact_type).toBe("owner");
-    expect(listing.rental_terms).toMatchObject({ price: 800, currency: "USD", minimum_lease_months: 6 });
+    const result: AgentResult = {
+      reply: "Spasibo, zapisala minimal'nyy srok.",
+      actions: [
+        { type: "set_contact_type", contactType: "owner" },
+        { type: "update_rental_terms", data: { minimum_lease_months: 6 } },
+      ],
+      stopConversation: false,
+    };
+    const finalized = finalizeAgentResponse({
+      result,
+      phase: "primary",
+      history: [{ role: "assistant", content: "Vy sobstvennik?" }],
+      batchText: "Da, ia sobstvenik. Minimalni 6 mesiacev.",
+      listings: [listing],
+      primaryListing: listing,
+    });
+
+    expect(finalized.reply).toBe(result.reply);
+    expect(finalized.gate.allowed).toEqual([
+      result.actions[0],
+      { ...result.actions[1], listingId: listing.id },
+    ]);
+    expect(finalized.gate.allowed.some(action => action.type === "set_crm_status")).toBe(false);
+  });
+
+  it("does not infer ownership or cooperation from a transliterated yes", () => {
+    const listing = structuredClone(baseListing);
+    const result: AgentResult = {
+      reply: "Možete li pojasniti, da li ste vlasnik?",
+      actions: [],
+      stopConversation: false,
+    };
+    const finalized = finalizeAgentResponse({
+      result,
+      phase: "primary",
+      history: [{ role: "assistant", content: "Vy gotovy sotrudnichat s agentstvom?" }],
+      batchText: "daa",
+      listings: [listing],
+      primaryListing: listing,
+    });
+
+    expect(finalized.reply).toBe(result.reply);
+    expect(finalized.gate.allowed).toEqual([]);
+    expect(finalized.stopConversation).toBe(false);
   });
 });

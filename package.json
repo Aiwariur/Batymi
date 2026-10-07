@@ -17,7 +17,8 @@
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
     "smoke": "tsx scripts/run-smoke-test.ts",
-    "eval": "tsx scripts/run-eval.ts",
+    "eval": "tsx scripts/check-owner-dialogue.ts",
+    "eval:scripted": "tsx scripts/check-owner-dialogue.ts --scripted",
     "send-webhook": "tsx scripts/send-test-webhook.ts"
   },
   "dependencies": {

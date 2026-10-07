@@ -25,8 +25,8 @@ describe("business rules", () => {
     expect(isTerminalListing(listing({ crm_status: "no_whatsapp" }), terminal)).toBe(true);
   });
 
-  it("does not treat qualified as terminal — it gets substantive replies", () => {
-    expect(isTerminalListing(listing({ crm_status: "qualified" }), ["disagreed", "archived", "no_whatsapp"])).toBe(false);
+  it("treats qualified as terminal even when it is absent from configured statuses", () => {
+    expect(isTerminalListing(listing({ crm_status: "qualified" }), ["disagreed", "archived", "no_whatsapp"])).toBe(true);
     expect(isTerminalListing(listing({ crm_status: "delivered" }), ["disagreed", "archived", "no_whatsapp"])).toBe(false);
   });
 
@@ -123,6 +123,7 @@ describe("executeActions", () => {
     return {
       calls,
       getListingsByPhone: vi.fn(async () => []),
+      getInteractions: vi.fn(async () => []),
       setStatus: vi.fn(async (id, status) => {
         calls.push(`status:${id}:${status}`);
       }),

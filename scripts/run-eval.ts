@@ -4,7 +4,7 @@ import { createLlmProvider, ChatMessage, LlmProvider } from "../src/agent/llm.pr
 import { buildSystemPrompt, resolvePhase } from "../src/agent/system-prompt";
 import { runAgent } from "../src/agent/agent";
 import { AgentAction } from "../src/agent/schemas";
-import { explicitCooperationConsent, finalizeAgentResponse } from "../src/conversation/conversation.service";
+import { finalizeAgentResponse } from "../src/conversation/conversation.service";
 import { HistoryEntry } from "../src/types";
 import { ConversationScenario, scenarios } from "../tests/conversations/scenarios";
 import { applyActions, buildListing, evaluate, EvaluatedTurn } from "../tests/conversations/evaluate";
@@ -54,7 +54,7 @@ async function runScenario(
     const crmStatusBefore = String(listing.crm_status ?? "");
     const contactTypeBefore = String(listing.contact_type ?? "<unset>");
     const phase = resolvePhase(listing.crm_status);
-    const consentSeen = explicitCooperationConsent(message, history);
+    const consentSeen = "model decision";
     const systemPrompt = buildSystemPrompt({
       crm: { phone: listing.phone ?? "", contact: null, listings: [listing] },
       listings: [listing],

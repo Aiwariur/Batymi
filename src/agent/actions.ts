@@ -107,7 +107,7 @@ export async function executeActions(
         // CRM's legacy auto-publication hook for this request; operators and
         // other callers retain the old default when the flag is absent.
         await ctx.crm.setStatus(listingId, action.status, {
-          suppressTelegram: action.status === "agreed",
+          suppressTelegram: action.status === "agreed" || action.status === "qualified",
         });
         ctx.debug.recordCrmAction("set_crm_status", { listingId, status: action.status });
         ctx.logger.info({ listingId, status: action.status }, "action.set_crm_status");

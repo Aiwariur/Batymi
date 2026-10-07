@@ -75,6 +75,9 @@ export class CrmReplySender implements MessageSender {
       if (!parsed.success) {
         throw new Error("CRM /chat/reply response failed validation");
       }
+      if (parsed.data.success === false || parsed.data.instance_id !== input.instanceId) {
+        throw new Error("CRM reply failed or returned a different WhatsApp instance; manual reconciliation required");
+      }
       this.logger.debug({ instanceId: input.instanceId }, "crm.reply.sent");
       return { idMessage: parsed.data.message_id, mocked: false };
     } finally {

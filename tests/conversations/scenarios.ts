@@ -80,7 +80,6 @@ export const baseListing: Listing = {
     listing_id: 101,
     price: 900,
     currency: "USD",
-    transaction_type: "rent_long_term",
     price_period: "month",
     deposit_amount: null,
     prepayment_months: null,
@@ -294,7 +293,6 @@ export const scenarios: ConversationScenario[] = [
       rentalTerms: {
         price: 900,
         currency: "USD",
-        transaction_type: "rent_long_term",
         price_period: "month",
         availability_status: "available",
         minimum_lease_months: 12,
@@ -316,7 +314,6 @@ export const scenarios: ConversationScenario[] = [
       rentalTerms: {
         price: 900,
         currency: "USD",
-        transaction_type: "rent_long_term",
         price_period: "month",
         availability_status: "available",
         minimum_lease_months: 12,
@@ -338,7 +335,6 @@ export const scenarios: ConversationScenario[] = [
       rentalTerms: {
         price: 900,
         currency: "USD",
-        transaction_type: "rent_long_term",
         price_period: "month",
         availability_status: "available",
         minimum_lease_months: 12,
@@ -371,7 +367,6 @@ export const scenarios: ConversationScenario[] = [
       rentalTerms: {
         price: 900,
         currency: "USD",
-        transaction_type: "rent_long_term",
         price_period: "month",
         availability_status: "available",
         minimum_lease_months: 12,

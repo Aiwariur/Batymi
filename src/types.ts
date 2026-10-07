@@ -16,6 +16,8 @@ export interface HistoryEntry {
   role: "user" | "assistant";
   content: string;
   ts: number;
+  messageId?: string;
+  sender?: string;
 }
 
 export type ContactType = "owner" | "realtor" | "potential_owner";
@@ -45,7 +47,7 @@ export type AgentCrmStatus = "agreed" | "qualified" | "disagreed";
  * Фаза диалога по crm_status:
  * - primary  — new/sent/delivered/read: первичная квалификация до agreed;
  * - agreed   — сбор арендных условий до qualified;
- * - qualified — данные собраны: содержательные ответы без действий.
+ * - qualified — данные собраны: новых вызовов модели/отправок нет.
  */
 export type ConversationPhase = "primary" | "agreed" | "qualified";
 
@@ -63,7 +65,6 @@ export interface RentalTerms {
   listing_id?: number | string | null;
   price?: number | string | null;
   currency?: string | null;
-  transaction_type?: string | null;
   price_period?: string | null;
   deposit_amount?: number | string | null;
   prepayment_months?: number | string | null;
@@ -79,6 +80,7 @@ export interface RentalTerms {
 
 /** Payload для POST /api/contacts/<phone>/listings/<id>/rental-terms. */
 export interface RentalTermsUpdate {
+  price_period?: "month";
   price?: number;
   currency?: string;
   deposit_amount?: number;

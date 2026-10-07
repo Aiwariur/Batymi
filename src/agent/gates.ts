@@ -10,6 +10,8 @@ export interface GateContext {
   listings: Listing[];
   primaryListingId: string | number;
   phase: ConversationPhase;
+  selectedListingId?: string | number;
+  contactListingCount?: number;
 }
 
 export interface RejectedAction {
@@ -45,7 +47,7 @@ const hasText = (value: string | undefined): value is string =>
   value !== undefined && value.trim() !== "";
 
 /**
- * Полнота фазы 2: минимум, без которого объявление нельзя публиковать.
+ * Минимум завершения разговора; публикация отдельно проверяется CRM readiness.
  * Проверяется по «склеенному» состоянию: CRM-данные + поля, которые LLM
  * пишет этими же действиями (update_deal_info / update_rental_terms).
  *
@@ -54,7 +56,7 @@ const hasText = (value: string | undefined): value is string =>
  * упираться в один неназванный ответ — недостающее агент фиксирует в
  * agent_notes, остальное доденет менеджер.
  */
-export function qualifiedMissingFields(listing: Listing): string[] {
+export function qualifiedMissingFields(listing: Listing, futureAvailabilityConfirmed = false): string[] {
   const missing: string[] = [];
   const terms = listing.rental_terms ?? {};
 
@@ -62,8 +64,9 @@ export function qualifiedMissingFields(listing: Listing): string[] {
   if (!Number.isFinite(price) || price <= 0) missing.push("rental_terms.price");
   if (!isFilled(terms.currency)) missing.push("rental_terms.currency");
   if (terms.price_period !== "month") missing.push("rental_terms.price_period");
-  if (terms.transaction_type !== "rent_long_term") missing.push("rental_terms.transaction_type");
-  if (terms.availability_status !== "available") missing.push("rental_terms.availability_status");
+  const futureAvailability = terms.availability_status === "unknown" &&
+    (isFilled(terms.available_from) || futureAvailabilityConfirmed && isFilled(terms.lease_terms_notes));
+  if (terms.availability_status !== "available" && !futureAvailability) missing.push("rental_terms.availability_status");
   const minimumLeaseMonths = Number(terms.minimum_lease_months);
   if (!Number.isFinite(minimumLeaseMonths) || minimumLeaseMonths <= 0) {
     missing.push("rental_terms.minimum_lease_months");
@@ -195,8 +198,7 @@ function dropUnchangedRentalFields(
 
 /**
  * Детерминированные гейты поверх действий LLM — до любого вызова CRM.
- * Каждое правило дублирует системный промпт (system-prompt.ts), но проверяется
- * кодом, а не промптом.
+ * Только целостность данных и адресация; смысл и следующий вопрос выбирает модель.
  */
 export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult {
   const allowed: AgentAction[] = [];
@@ -209,6 +211,16 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
   // second pass so an LLM cannot qualify before a later write in the same
   // batch, and rejected/unscoped actions cannot contribute to completeness.
   for (const action of actions) {
+    if ((ctx.contactListingCount ?? ctx.listings.length) > 1 && (ctx.selectedListingId === undefined ||
+      !listingIds.has(String(ctx.selectedListingId)))) {
+      reject(action, "listing_selection_required");
+      continue;
+    }
+    if (action.type !== "set_contact_type" && (ctx.contactListingCount ?? ctx.listings.length) > 1 &&
+      String(action.listingId) !== String(ctx.selectedListingId)) {
+      reject(action, "action_targets_unselected_listing");
+      continue;
+    }
     switch (action.type) {
       case "set_contact_type": {
         if (ctx.phase === "qualified") {
@@ -277,16 +289,17 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
       case "set_crm_status": {
         const statusAction = action as SetCrmStatusAction;
         const status = statusAction.status;
+        const existingTarget = statusAction.listingId ?? ctx.primaryListingId;
+        if (findListing(ctx, existingTarget)?.crm_status === status) {
+          reject(action, status === "agreed" ? "status_already_agreed" : "unchanged_crm_status");
+          break;
+        }
         if ((FORBIDDEN_AGENT_STATUSES as readonly string[]).includes(status)) {
           reject(action, "forbidden_status");
           break;
         }
         if (ctx.phase === "qualified") {
           reject(action, "qualified_dialog_no_actions");
-          break;
-        }
-        if (ctx.phase === "primary" && status === "qualified") {
-          reject(action, "qualified_not_in_primary_phase");
           break;
         }
         if (ctx.phase === "agreed" && status === "agreed") {
@@ -296,6 +309,10 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
         const target = resolveListingId(statusAction.listingId, ctx, listingIds);
         if ("reason" in target) {
           reject(action, target.reason);
+          break;
+        }
+        if (findListing(ctx, target.listingId)?.crm_status === status) {
+          reject(action, "unchanged_crm_status");
           break;
         }
         allowed.push({ ...statusAction, listingId: target.listingId });
@@ -328,7 +345,14 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
       continue;
     }
     const merged = mergeActionsOntoListing(listing, acceptedWrites, action.listingId!);
-    const missing = qualifiedMissingFields(merged);
+    const missing = qualifiedMissingFields(merged, action.availabilityBasis === "future");
+    const typeAction = [...allowed].reverse().find(item => item.type === "set_contact_type");
+    const owner = typeAction?.type === "set_contact_type" ? typeAction.contactType : listing.contact_type;
+    if (owner !== "owner") missing.push("owner");
+    const consent = listing.crm_status === "agreed" || allowed.some(item => item.type === "set_crm_status" && item.status === "agreed");
+    if (!consent) missing.push("cooperation");
+    if ((ctx.contactListingCount ?? ctx.listings.length) > 1) missing.push("multi_listing_scope_requires_manager");
+    if (allowed.some(item => item.type === "set_crm_status" && item.status === "disagreed")) missing.push("conflicting_refusal");
     if (missing.length > 0) {
       reject(action, `qualified_incomplete:${missing.join(",")}`);
       continue;
@@ -342,8 +366,9 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
   return {
     allowed: [
       ...finalized.filter(
-        (action) => !(action.type === "set_crm_status" && action.status === "qualified"),
+        (action) => action.type !== "set_crm_status",
       ),
+      ...finalized.filter(action => action.type === "set_crm_status" && action.status !== "qualified"),
       ...qualifiedStatuses,
     ],
     rejected,

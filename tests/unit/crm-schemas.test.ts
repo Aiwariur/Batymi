@@ -26,7 +26,6 @@ const listingPayload = {
     listing_id: 101,
     price: 900,
     currency: "USD",
-    transaction_type: "rent_long_term",
     price_period: "month",
     deposit_amount: null,
     minimum_lease_months: null,
@@ -50,7 +49,7 @@ describe("crm schemas", () => {
     const listing = parsed.flats[0];
     expect(listing.id).toBe(101);
     expect(listing.crm_status).toBe("delivered");
-    expect(listing.rental_terms?.transaction_type).toBe("rent_long_term");
+    expect(listing.rental_terms).not.toHaveProperty("transaction_type");
     expect(listing.rental_terms?.price_period).toBe("month");
     expect(listing.rental_terms).not.toHaveProperty("publication_consent");
   });

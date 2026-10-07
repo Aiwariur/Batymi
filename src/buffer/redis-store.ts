@@ -3,9 +3,11 @@ import type Redis from "ioredis";
 import { HistoryEntry, NormalizedMessage } from "../types";
 import {
   ActiveBatch,
+  AgentCheckpoint,
   AcquiredLock,
   ConversationStore,
   OutboundIntent,
+  validateAgentCheckpoint,
 } from "./conversation-store";
 import {
   activeBatchKey,
@@ -73,6 +75,26 @@ end
 local outbound = cjson.encode(active.outbound)
 redis.call('SET', KEYS[1], cjson.encode(active))
 return outbound
+`;
+
+const SAVE_AGENT_CHECKPOINT_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+local active = cjson.decode(raw)
+if active.batchKey ~= ARGV[1] then return 0 end
+if ARGV[3] ~= '' and redis.call('GET', KEYS[2]) ~= ARGV[3] then return -2 end
+local incoming = cjson.decode(ARGV[2])
+local previous = nil
+if active.agentCheckpointJson ~= nil then
+  previous = cjson.decode(active.agentCheckpointJson)
+elseif active.agentCheckpoint ~= nil then
+  previous = active.agentCheckpoint
+end
+if previous ~= nil and tonumber(incoming.completedActions) < tonumber(previous.completedActions) then return -1 end
+active.agentCheckpoint = nil
+active.agentCheckpointJson = ARGV[2]
+redis.call('SET', KEYS[1], cjson.encode(active))
+return 1
 `;
 
 const PREPARE_OUTBOUND_SCRIPT = `
@@ -173,12 +195,41 @@ export class RedisConversationStore implements ConversationStore {
   async getActiveBatch(conversationKey: string): Promise<ActiveBatch | null> {
     const metadata = await this.redis.get(activeBatchKey(conversationKey));
     if (!metadata) return null;
-    const parsed = JSON.parse(metadata) as Omit<ActiveBatch, "messages">;
+    const parsed = JSON.parse(metadata) as Omit<ActiveBatch, "messages"> & {
+      agentCheckpointJson?: string;
+    };
     const raw = await this.redis.lrange(activeBatchMessagesKey(conversationKey), 0, -1);
+    const { agentCheckpointJson, ...active } = parsed;
     return {
-      ...parsed,
+      ...active,
+      agentCheckpoint: agentCheckpointJson
+        ? JSON.parse(agentCheckpointJson) as ActiveBatch["agentCheckpoint"]
+        : parsed.agentCheckpoint,
       messages: raw.map((item) => JSON.parse(item) as NormalizedMessage),
     };
+  }
+
+  async saveAgentCheckpoint(
+    conversationKey: string,
+    batchKey: string,
+    checkpoint: AgentCheckpoint,
+    lockToken?: string,
+  ): Promise<void> {
+    validateAgentCheckpoint(checkpoint);
+    const result = await this.redis.eval(
+      SAVE_AGENT_CHECKPOINT_SCRIPT,
+      2,
+      activeBatchKey(conversationKey),
+      lockKey(conversationKey),
+      batchKey,
+      JSON.stringify(checkpoint),
+      lockToken ?? "",
+    );
+    if (Number(result) !== 1) {
+      if (Number(result) === -1) throw new Error("agent checkpoint cannot move completedActions backwards");
+      if (Number(result) === -2) throw new Error("conversation lock is missing or changed while saving agent checkpoint");
+      throw new Error("active batch is missing or changed while saving agent checkpoint");
+    }
   }
 
   async ackBatch(conversationKey: string, batchKey?: string): Promise<void> {

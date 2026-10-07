@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { AgentResult } from "../agent/schemas";
 import { HistoryEntry, NormalizedMessage } from "../types";
 
 export interface AcquiredLock {
@@ -17,11 +18,36 @@ export interface OutboundIntent {
   error?: string;
 }
 
+/** Durable progress for the currently claimed inbound batch. */
+export interface AgentCheckpoint {
+  result: AgentResult;
+  /** Number of accepted CRM actions that completed successfully, in order. */
+  completedActions: number;
+  /** Final text to send once all actions have completed. */
+  reply?: string;
+  /** True once the final reply has been persisted for outbound recovery. */
+  finalized?: boolean;
+}
+
+export function validateAgentCheckpoint(checkpoint: AgentCheckpoint): void {
+  if (
+    !Number.isInteger(checkpoint.completedActions) ||
+    checkpoint.completedActions < 0 ||
+    checkpoint.completedActions > checkpoint.result.actions.length
+  ) {
+    throw new Error("agent checkpoint completedActions is outside the action list");
+  }
+  if (checkpoint.finalized && typeof checkpoint.reply !== "string") {
+    throw new Error("a finalized agent checkpoint must include the final reply");
+  }
+}
+
 export interface ActiveBatch {
   batchKey: string;
   messages: NormalizedMessage[];
   quarantineReason?: string;
   outbound?: OutboundIntent;
+  agentCheckpoint?: AgentCheckpoint;
 }
 
 /** Stable identity for the currently claimed inbound batch. */
@@ -71,6 +97,14 @@ export interface ConversationStore {
 
   /** Return the durable in-flight batch, if one exists. */
   getActiveBatch(conversationKey: string): Promise<ActiveBatch | null>;
+
+  /** Save model/action progress only while batchKey still fences the active batch. */
+  saveAgentCheckpoint(
+    conversationKey: string,
+    batchKey: string,
+    checkpoint: AgentCheckpoint,
+    lockToken?: string,
+  ): Promise<void>;
 
   /** Ack the in-flight batch after all CRM/history work is complete. */
   ackBatch(conversationKey: string, batchKey?: string): Promise<void>;

@@ -39,6 +39,7 @@ export interface ResidentialComplex {
 
 export interface CrmClient {
   getListingsByPhone(phone: string): Promise<Listing[]>;
+  getInteractions(phone: string, instanceId: string, limit?: number): Promise<CrmInteraction[]>;
   setStatus(
     listingId: string | number,
     status: CrmStatus,
@@ -52,6 +53,16 @@ export interface CrmClient {
     data: RentalTermsUpdate,
   ): Promise<void>;
   getComplexes(): Promise<ResidentialComplex[]>;
+}
+
+export interface CrmInteraction {
+  id: number | string;
+  direction: "incoming" | "outgoing";
+  text: string;
+  sender: string | null;
+  sent_at: string | null;
+  message_id?: string | null;
+  instance_id?: string | null;
 }
 
 export function formatContactPhone(phone: string): string {
@@ -104,6 +115,10 @@ function assertOk(status: number, json: unknown): void {
   if (json === undefined) {
     throw new CrmError("CRM returned an empty response", status, false);
   }
+  if (json && typeof json === "object" &&
+      ((json as { success?: unknown }).success === false || (json as { ok?: unknown }).ok === false)) {
+    throw new CrmError("CRM operation reported failure", status, false);
+  }
 }
 
 export class RealCrmClient implements CrmClient {
@@ -134,6 +149,16 @@ export class RealCrmClient implements CrmClient {
       );
     }
     return parsed.data.flats as Listing[];
+  }
+
+  async getInteractions(phone: string, instanceId: string, limit = 50): Promise<CrmInteraction[]> {
+    const query = new URLSearchParams({ latest: "1", include_first: "1", type: "whatsapp", instance_id: instanceId, limit: String(limit) });
+    const { status, json } = await requestJson(`${this.base}/contacts/${encodeURIComponent(formatContactPhone(phone))}/interactions?${query}`, { method: "GET" }, this.config.crmApiKey);
+    assertOk(status, json);
+    const { interactionsResponseSchema } = await import("./crm.schemas");
+    const parsed = interactionsResponseSchema.safeParse(json);
+    if (!parsed.success) throw new CrmError("CRM interactions response failed validation", status);
+    return parsed.data.messages;
   }
 
   async setStatus(
@@ -265,7 +290,6 @@ function mockListing(id: number, overrides: Partial<MockListingState> = {}): Moc
       listing_id: id,
       price: 900,
       currency: "USD",
-      transaction_type: "rent_long_term",
       price_period: "month",
       deposit_amount: null,
       prepayment_months: null,
@@ -319,6 +343,7 @@ function toListing(contact: MockContactState, listing: MockListingState, phone: 
  * Тесты могут засеять состояние через setContactState.
  */
 export class MockCrmClient implements CrmClient {
+  async getInteractions(_phone: string, _instanceId: string, _limit = 50): Promise<CrmInteraction[]> { return []; }
   private readonly contacts = new Map<string, MockContactState>();
 
   constructor(

@@ -2,10 +2,12 @@ import { randomUUID } from "crypto";
 import { HistoryEntry, NormalizedMessage } from "../types";
 import {
   ActiveBatch,
+  AgentCheckpoint,
   AcquiredLock,
   batchKeyForMessages,
   ConversationStore,
   OutboundIntent,
+  validateAgentCheckpoint,
 } from "./conversation-store";
 
 interface ExpiringValue<T> {
@@ -92,7 +94,33 @@ export class MemoryConversationStore implements ConversationStore {
       ...active,
       messages: active.messages.slice(),
       outbound: active.outbound ? { ...active.outbound } : undefined,
+      agentCheckpoint: active.agentCheckpoint
+        ? structuredClone(active.agentCheckpoint)
+        : undefined,
     };
+  }
+
+  async saveAgentCheckpoint(
+    conversationKey: string,
+    batchKey: string,
+    checkpoint: AgentCheckpoint,
+    lockToken?: string,
+  ): Promise<void> {
+    validateAgentCheckpoint(checkpoint);
+    const active = this.active.get(conversationKey);
+    if (!active || active.batchKey !== batchKey) {
+      throw new Error("active batch is missing or changed while saving agent checkpoint");
+    }
+    if (lockToken !== undefined) {
+      const lock = this.locks.get(conversationKey);
+      if (!lock || lock.value !== lockToken || lock.expiresAt <= Date.now()) {
+        throw new Error("conversation lock is missing or changed while saving agent checkpoint");
+      }
+    }
+    if (active.agentCheckpoint && checkpoint.completedActions < active.agentCheckpoint.completedActions) {
+      throw new Error("agent checkpoint cannot move completedActions backwards");
+    }
+    active.agentCheckpoint = structuredClone(checkpoint);
   }
 
   async ackBatch(conversationKey: string, batchKey?: string): Promise<void> {

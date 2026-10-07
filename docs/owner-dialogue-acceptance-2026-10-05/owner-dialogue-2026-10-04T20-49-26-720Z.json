@@ -1,0 +1,4440 @@
+{
+  "generatedAt": "2026-10-04T20:49:26.714Z",
+  "mode": "configured OpenAI-compatible LLM; local synthetic CRM; no WhatsApp transport",
+  "modelAlias": "deepseek/deepseek-v4.1-flash",
+  "promptVersion": "owner-dialogue-2026-10-05-v5",
+  "scenarios": [
+    {
+      "id": "complete-outreach-to-qualified",
+      "title": "Complete ordinary conversation from real outreach through qualified and silence",
+      "turns": [
+        {
+          "sequence": 1,
+          "ownerText": "Да",
+          "runId": "a88e8c41-a165-4896-b885-4e880f9efd34",
+          "outcome": {
+            "status": "processed",
+            "runId": "a88e8c41-a165-4896-b885-4e880f9efd34",
+            "executedActions": [
+              "update_rental_terms"
+            ],
+            "reply": "Отлично! Вы собственник этой квартиры?",
+            "stopConversation": false
+          },
+          "before": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "unknown"
+                }
+              }
+            ],
+            "interaction_count": 1
+          },
+          "after": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 3
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/listings/101/rental-terms",
+              "body": {
+                "availability_status": "available"
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "unknown"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "after": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Отлично! Вы собственник этой квартиры?",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "after": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Отлично! Вы собственник этой квартиры?",
+          "modelOutputs": [
+            "{\"reply\":\"Отлично! Вы собственник этой квартиры?\",\"actions\":[{\"type\":\"update_rental_terms\",\"listingId\":101,\"data\":{\"availability_status\":\"available\"}}],\"stopConversation\":false}",
+            "{\"reply\":\"Отлично! Вы собственник этой квартиры?\",\"actions\":[],\"stopConversation\":false}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "a88e8c41-a165-4896-b885-4e880f9efd34",
+                "executedActions": [
+                  "update_rental_terms"
+                ],
+                "reply": "Отлично! Вы собственник этой квартиры?",
+                "stopConversation": false
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "unknown"
+                    }
+                  }
+                ],
+                "interaction_count": 1
+              },
+              "after": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/listings/101/rental-terms",
+                  "body": {
+                    "availability_status": "available"
+                  },
+                  "before": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "unknown"
+                        }
+                      }
+                    ],
+                    "interaction_count": 2
+                  },
+                  "after": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 2
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Отлично! Вы собственник этой квартиры?",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 2
+                  },
+                  "after": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 2,
+          "ownerText": "Да",
+          "runId": "35eb66ed-22eb-4d72-996c-9d89e562081f",
+          "outcome": {
+            "status": "processed",
+            "runId": "35eb66ed-22eb-4d72-996c-9d89e562081f",
+            "executedActions": [
+              "set_contact_type"
+            ],
+            "reply": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+            "stopConversation": false
+          },
+          "before": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 3
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 5
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/type",
+              "body": {
+                "contact_type": "owner"
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 4
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 4
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 4
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 5
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+          "modelOutputs": [
+            "{\"reply\":\"Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?\",\"actions\":[{\"type\":\"set_contact_type\",\"contactType\":\"owner\"}],\"stopConversation\":false}",
+            "{\"reply\":\"Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?\",\"actions\":[],\"stopConversation\":false}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "35eb66ed-22eb-4d72-996c-9d89e562081f",
+                "executedActions": [
+                  "set_contact_type"
+                ],
+                "reply": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+                "stopConversation": false
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 5
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/type",
+                  "body": {
+                    "contact_type": "owner"
+                  },
+                  "before": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 4
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 4
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 4
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 5
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:37.807Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:49.558Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 3,
+          "ownerText": "Да",
+          "runId": "ab15802c-197a-45c8-9a39-8ea988937392",
+          "outcome": {
+            "status": "processed",
+            "runId": "ab15802c-197a-45c8-9a39-8ea988937392",
+            "executedActions": [
+              "set_crm_status"
+            ],
+            "reply": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+            "stopConversation": false
+          },
+          "before": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 5
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 7
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/status/set",
+              "body": {
+                "id": 101,
+                "status": "agreed",
+                "suppress_telegram": true
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 6
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 6
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 6
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 7
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+          "modelOutputs": [
+            "{\"reply\":\"Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?\",\"actions\":[{\"type\":\"set_crm_status\",\"listingId\":101,\"status\":\"agreed\"}],\"stopConversation\":false}",
+            "{\"reply\":\"Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?\",\"actions\":[],\"stopConversation\":false}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "ab15802c-197a-45c8-9a39-8ea988937392",
+                "executedActions": [
+                  "set_crm_status"
+                ],
+                "reply": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+                "stopConversation": false
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 5
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 7
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/status/set",
+                  "body": {
+                    "id": 101,
+                    "status": "agreed",
+                    "suppress_telegram": true
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 6
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 6
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 6
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 7
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:37.807Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:49.558Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-3",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:49.560Z",
+              "whatsapp_message_id": "owner-dialogue-3",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-3",
+              "text": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:05.330Z",
+              "whatsapp_message_id": "crm-message-3",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-3",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 4,
+          "ownerText": "Да, верно",
+          "runId": "7fd7b2c0-ee72-428a-90d0-2d2e00a515f9",
+          "outcome": {
+            "status": "processed",
+            "runId": "7fd7b2c0-ee72-428a-90d0-2d2e00a515f9",
+            "executedActions": [],
+            "reply": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+            "stopConversation": false
+          },
+          "before": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 7
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 9
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 8
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 9
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+          "modelOutputs": [
+            "{\"reply\":\"Спасибо! Какой минимальный срок аренды вы рассматриваете?\",\"actions\":[],\"stopConversation\":false}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "7fd7b2c0-ee72-428a-90d0-2d2e00a515f9",
+                "executedActions": [],
+                "reply": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+                "stopConversation": false
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 7
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 9
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 8
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 9
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:37.807Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:49.558Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-3",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:49.560Z",
+              "whatsapp_message_id": "owner-dialogue-3",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-3",
+              "text": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:05.330Z",
+              "whatsapp_message_id": "crm-message-3",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-3",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-4",
+              "text": "Да, верно",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:05.332Z",
+              "whatsapp_message_id": "owner-dialogue-4",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-4",
+              "text": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:11.277Z",
+              "whatsapp_message_id": "crm-message-4",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-4",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 5,
+          "ownerText": "Минимум год",
+          "runId": "71bd4c0c-f55c-4f5a-8c0d-9a6cc64d297a",
+          "outcome": {
+            "status": "processed",
+            "runId": "71bd4c0c-f55c-4f5a-8c0d-9a6cc64d297a",
+            "executedActions": [
+              "update_rental_terms",
+              "set_crm_status"
+            ],
+            "reply": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+            "stopConversation": true
+          },
+          "before": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 9
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "qualified",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": 12,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 11
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/listings/101/rental-terms",
+              "body": {
+                "minimum_lease_months": 12
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 10
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 10
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/status/set",
+              "body": {
+                "id": 101,
+                "status": "qualified",
+                "suppress_telegram": true
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 10
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 10
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 10
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 11
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+          "modelOutputs": [
+            "{\"reply\":\"Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!\",\"actions\":[{\"type\":\"update_rental_terms\",\"listingId\":101,\"data\":{\"minimum_lease_months\":12}},{\"type\":\"set_crm_status\",\"listingId\":101,\"status\":\"qualified\"}],\"stopConversation\":true}",
+            "{\"reply\":\"Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!\",\"actions\":[],\"stopConversation\":true}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "71bd4c0c-f55c-4f5a-8c0d-9a6cc64d297a",
+                "executedActions": [
+                  "update_rental_terms",
+                  "set_crm_status"
+                ],
+                "reply": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+                "stopConversation": true
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 9
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 11
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/listings/101/rental-terms",
+                  "body": {
+                    "minimum_lease_months": 12
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 10
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 10
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/status/set",
+                  "body": {
+                    "id": 101,
+                    "status": "qualified",
+                    "suppress_telegram": true
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 10
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "qualified",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 10
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "qualified",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 10
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "qualified",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 11
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:37.807Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:49.558Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-3",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:49.560Z",
+              "whatsapp_message_id": "owner-dialogue-3",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-3",
+              "text": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:05.330Z",
+              "whatsapp_message_id": "crm-message-3",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-3",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-4",
+              "text": "Да, верно",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:05.332Z",
+              "whatsapp_message_id": "owner-dialogue-4",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-4",
+              "text": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:11.277Z",
+              "whatsapp_message_id": "crm-message-4",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-4",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-5",
+              "text": "Минимум год",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:11.279Z",
+              "whatsapp_message_id": "owner-dialogue-5",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-5",
+              "text": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:26.707Z",
+              "whatsapp_message_id": "crm-message-5",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-5",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 6,
+          "ownerText": "Спасибо",
+          "runId": "2343cf4a-e53f-48af-87f1-b0f1593fdde6",
+          "outcome": {
+            "status": "terminal",
+            "runId": "2343cf4a-e53f-48af-87f1-b0f1593fdde6"
+          },
+          "before": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "qualified",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": 12,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 11
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "qualified",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": 12,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 12
+          },
+          "crmWrites": [],
+          "assistantReply": null,
+          "modelOutputs": [],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "terminal",
+                "runId": "2343cf4a-e53f-48af-87f1-b0f1593fdde6"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 11
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "qualified",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 12
+              },
+              "sentCount": 0,
+              "writeEvents": []
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "outreach-complete",
+              "text": "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-01T10:00:00Z",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "owner-dialogue-1",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.352Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Отлично! Вы собственник этой квартиры?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:37.805Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:37.807Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! Готовы ли вы сотрудничать с нашим агентством по этой квартире?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:49.558Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-3",
+              "text": "Да",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:49.560Z",
+              "whatsapp_message_id": "owner-dialogue-3",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-3",
+              "text": "Спасибо! Подтвердите, пожалуйста: цена 900 USD в месяц актуальна?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:05.330Z",
+              "whatsapp_message_id": "crm-message-3",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-3",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-4",
+              "text": "Да, верно",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:05.332Z",
+              "whatsapp_message_id": "owner-dialogue-4",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-4",
+              "text": "Спасибо! Какой минимальный срок аренды вы рассматриваете?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:11.277Z",
+              "whatsapp_message_id": "crm-message-4",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-4",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-5",
+              "text": "Минимум год",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:11.279Z",
+              "whatsapp_message_id": "owner-dialogue-5",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-5",
+              "text": "Спасибо! Всё подтверждено: 900 USD в месяц, минимальный срок аренды — 12 месяцев. Хорошего дня!",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:26.707Z",
+              "whatsapp_message_id": "crm-message-5",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-5",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-6",
+              "text": "Спасибо",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:49:26.709Z",
+              "whatsapp_message_id": "owner-dialogue-6",
+              "whatsapp_instance_id": "acceptance-instance"
+            }
+          ],
+          "invariants": []
+        }
+      ]
+    },
+    {
+      "id": "multiple-listings",
+      "title": "Ask for address before writing when phone has two flats",
+      "turns": [
+        {
+          "sequence": 1,
+          "ownerText": "Я собственник и готов сотрудничать. Цена 850 USD в месяц, минимум год",
+          "runId": "70126f47-3604-4419-baa1-bdcd3b917dfc",
+          "outcome": {
+            "status": "processed",
+            "runId": "70126f47-3604-4419-baa1-bdcd3b917dfc",
+            "executedActions": [],
+            "reply": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+            "stopConversation": false
+          },
+          "before": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              },
+              {
+                "id": 202,
+                "title": "Batumi flat 202",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Demo Street 202",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 202,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 0
+          },
+          "after": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              },
+              {
+                "id": 202,
+                "title": "Batumi flat 202",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Demo Street 202",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 202,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 2
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 1
+              },
+              "after": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+          "modelOutputs": [
+            "{\"reply\":\"Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?\",\"actions\":[],\"stopConversation\":false}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "70126f47-3604-4419-baa1-bdcd3b917dfc",
+                "executedActions": [],
+                "reply": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+                "stopConversation": false
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 0
+              },
+              "after": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 1
+                  },
+                  "after": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 2
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "owner-dialogue-1",
+              "text": "Я собственник и готов сотрудничать. Цена 850 USD в месяц, минимум год",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.353Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:28.140Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        },
+        {
+          "sequence": 2,
+          "ownerText": "Это Kobaladze 12",
+          "runId": "0e4e020a-e86d-46df-9ced-b6d9dc5f278c",
+          "outcome": {
+            "status": "processed",
+            "runId": "0e4e020a-e86d-46df-9ced-b6d9dc5f278c",
+            "executedActions": [
+              "set_contact_type",
+              "update_rental_terms",
+              "update_deal_info",
+              "set_crm_status"
+            ],
+            "reply": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+            "stopConversation": true
+          },
+          "before": {
+            "contact_type": null,
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              },
+              {
+                "id": 202,
+                "title": "Batumi flat 202",
+                "crm_status": "sent",
+                "contact_type": null,
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Demo Street 202",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 202,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 2
+          },
+          "after": {
+            "contact_type": "owner",
+            "listings": [
+              {
+                "id": 101,
+                "title": "Batumi flat 101",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Kobaladze 12",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 101,
+                  "price": 850,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": 12,
+                  "availability_status": "available"
+                },
+                "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+              },
+              {
+                "id": 202,
+                "title": "Batumi flat 202",
+                "crm_status": "agreed",
+                "contact_type": "owner",
+                "assigned_manager_id": 2,
+                "assigned_manager_is_ai": true,
+                "city": "Batumi",
+                "address": "Demo Street 202",
+                "price": "900",
+                "currency": "USD",
+                "rental_terms": {
+                  "listing_id": 202,
+                  "price": 900,
+                  "currency": "USD",
+                  "transaction_type": "rent_long_term",
+                  "price_period": "month",
+                  "minimum_lease_months": null,
+                  "availability_status": "available"
+                }
+              }
+            ],
+            "interaction_count": 4
+          },
+          "crmWrites": [
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/type",
+              "body": {
+                "contact_type": "owner"
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/listings/101/rental-terms",
+              "body": {
+                "price": 850,
+                "minimum_lease_months": 12
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/contacts/+995599123456/deal",
+              "body": {
+                "listing_id": 101,
+                "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/status/set",
+              "body": {
+                "id": 101,
+                "status": "agreed",
+                "suppress_telegram": true
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "statusCode": 200
+            },
+            {
+              "method": "POST",
+              "path": "/chat/reply",
+              "body": {
+                "phone": "+995599123456",
+                "message": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+                "instance_id": "acceptance-instance"
+              },
+              "before": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 3
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 4
+              },
+              "statusCode": 200
+            }
+          ],
+          "assistantReply": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+          "modelOutputs": [
+            "{\"reply\":\"Отлично, спасибо! Зафиксировал: Kobaladze 12, 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать.\",\"actions\":[{\"type\":\"set_contact_type\",\"contactType\":\"owner\"},{\"type\":\"update_rental_terms\",\"listingId\":101,\"data\":{\"price\":850,\"currency\":\"USD\",\"transaction_type\":\"rent_long_term\",\"price_period\":\"month\",\"minimum_lease_months\":12,\"availability_status\":\"available\"}},{\"type\":\"set_crm_status\",\"listingId\":101,\"status\":\"agreed\"},{\"type\":\"set_crm_status\",\"listingId\":101,\"status\":\"qualified\"}],\"stopConversation\":true,\"selectedListingId\":101}",
+            "{\"reply\":\"Спасибо! Записал по Kobaladze 12: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Поскольку у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.\",\"actions\":[{\"type\":\"set_contact_type\",\"contactType\":\"owner\"},{\"type\":\"update_rental_terms\",\"listingId\":101,\"data\":{\"price\":850,\"currency\":\"USD\",\"transaction_type\":\"rent_long_term\",\"price_period\":\"month\",\"minimum_lease_months\":12}},{\"type\":\"set_crm_status\",\"listingId\":101,\"status\":\"agreed\"},{\"type\":\"update_deal_info\",\"listingId\":101,\"data\":{\"agent_notes\":\"Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён\"}}],\"stopConversation\":true,\"selectedListingId\":101}",
+            "{\"reply\":\"Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.\",\"actions\":[],\"stopConversation\":true,\"selectedListingId\":101}"
+          ],
+          "attempts": [
+            {
+              "outcome": {
+                "status": "processed",
+                "runId": "0e4e020a-e86d-46df-9ced-b6d9dc5f278c",
+                "executedActions": [
+                  "set_contact_type",
+                  "update_rental_terms",
+                  "update_deal_info",
+                  "set_crm_status"
+                ],
+                "reply": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+                "stopConversation": true
+              },
+              "before": {
+                "contact_type": null,
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "sent",
+                    "contact_type": null,
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 2
+              },
+              "after": {
+                "contact_type": "owner",
+                "listings": [
+                  {
+                    "id": 101,
+                    "title": "Batumi flat 101",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Kobaladze 12",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 101,
+                      "price": 850,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": 12,
+                      "availability_status": "available"
+                    },
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  {
+                    "id": 202,
+                    "title": "Batumi flat 202",
+                    "crm_status": "agreed",
+                    "contact_type": "owner",
+                    "assigned_manager_id": 2,
+                    "assigned_manager_is_ai": true,
+                    "city": "Batumi",
+                    "address": "Demo Street 202",
+                    "price": "900",
+                    "currency": "USD",
+                    "rental_terms": {
+                      "listing_id": 202,
+                      "price": 900,
+                      "currency": "USD",
+                      "transaction_type": "rent_long_term",
+                      "price_period": "month",
+                      "minimum_lease_months": null,
+                      "availability_status": "available"
+                    }
+                  }
+                ],
+                "interaction_count": 4
+              },
+              "sentCount": 1,
+              "writeEvents": [
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/type",
+                  "body": {
+                    "contact_type": "owner"
+                  },
+                  "before": {
+                    "contact_type": null,
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": null,
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/listings/101/rental-terms",
+                  "body": {
+                    "price": 850,
+                    "minimum_lease_months": 12
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/contacts/+995599123456/deal",
+                  "body": {
+                    "listing_id": 101,
+                    "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        }
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        },
+                        "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/status/set",
+                  "body": {
+                    "id": 101,
+                    "status": "agreed",
+                    "suppress_telegram": true
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        },
+                        "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "sent",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        },
+                        "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "statusCode": 200
+                },
+                {
+                  "method": "POST",
+                  "path": "/chat/reply",
+                  "body": {
+                    "phone": "+995599123456",
+                    "message": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+                    "instance_id": "acceptance-instance"
+                  },
+                  "before": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        },
+                        "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 3
+                  },
+                  "after": {
+                    "contact_type": "owner",
+                    "listings": [
+                      {
+                        "id": 101,
+                        "title": "Batumi flat 101",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Kobaladze 12",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 101,
+                          "price": 850,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": 12,
+                          "availability_status": "available"
+                        },
+                        "agent_notes": "Нужна проверка менеджера: у контакта несколько квартир, scope квалификации не определён"
+                      },
+                      {
+                        "id": 202,
+                        "title": "Batumi flat 202",
+                        "crm_status": "agreed",
+                        "contact_type": "owner",
+                        "assigned_manager_id": 2,
+                        "assigned_manager_is_ai": true,
+                        "city": "Batumi",
+                        "address": "Demo Street 202",
+                        "price": "900",
+                        "currency": "USD",
+                        "rental_terms": {
+                          "listing_id": 202,
+                          "price": 900,
+                          "currency": "USD",
+                          "transaction_type": "rent_long_term",
+                          "price_period": "month",
+                          "minimum_lease_months": null,
+                          "availability_status": "available"
+                        }
+                      }
+                    ],
+                    "interaction_count": 4
+                  },
+                  "statusCode": 200
+                }
+              ]
+            }
+          ],
+          "crmInteractions": [
+            {
+              "id": "owner-dialogue-1",
+              "text": "Я собственник и готов сотрудничать. Цена 850 USD в месяц, минимум год",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:24.353Z",
+              "whatsapp_message_id": "owner-dialogue-1",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-1",
+              "text": "Понял. Уточните, пожалуйста, о какой квартире речь — Kobaladze 12 или Demo Street 202?",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:48:28.140Z",
+              "whatsapp_message_id": "crm-message-1",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-1",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            },
+            {
+              "id": "owner-dialogue-2",
+              "text": "Это Kobaladze 12",
+              "sender": "owner",
+              "direction": "inbound",
+              "sent_at": "2026-10-04T20:48:28.148Z",
+              "whatsapp_message_id": "owner-dialogue-2",
+              "whatsapp_instance_id": "acceptance-instance"
+            },
+            {
+              "id": "crm-message-2",
+              "text": "Спасибо! По Kobaladze 12 зафиксировано: 850 USD в месяц, минимальный срок — 12 месяцев, вы собственник и готовы сотрудничать. Так как у вас несколько квартир, потребуется проверка менеджера — он свяжется с вами по условиям.",
+              "sender": "agent",
+              "direction": "outbound",
+              "sent_at": "2026-10-04T20:49:01.771Z",
+              "whatsapp_message_id": "crm-message-2",
+              "whatsapp_instance_id": "acceptance-instance",
+              "message_id": "crm-message-2",
+              "instance_id": "acceptance-instance",
+              "channel": "whatsapp"
+            }
+          ],
+          "invariants": []
+        }
+      ]
+    }
+  ]
+}
