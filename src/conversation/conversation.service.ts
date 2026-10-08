@@ -13,6 +13,7 @@ import { debounceTtlMs } from "../buffer/keys";
 import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 import { assembleCrmHistory } from "./crm-history";
 import { runTrace } from "../observability/run-trace";
+import { cooperationDecision, COOPERATION_QUESTION } from "./cooperation-only";
 
 const MAX_MANUAL_RETRIES = 2;
 
@@ -208,6 +209,15 @@ export async function handleConversationJob(
     }
     log.info({ messages: batch.length }, "buffer.drained");
 
+    // Switching to handoff mode cancels already planned qualification replies.
+    // Ambiguous sends were quarantined above and still require reconciliation.
+    if (services.config.ownerDialogueMode === "cooperation_only" &&
+        (activeBatch.outbound || activeBatch.agentCheckpoint && activeBatch.agentCheckpoint.mode !== "cooperation_only")) {
+      await services.store.ackBatch(key, activeBatch.batchKey);
+      log.info("cooperation.old_plan_cancelled");
+      return outcome("skipped", runId);
+    }
+
     // A confirmed remote send must be finalized from the durable intent. Do
     // not rerun the LLM or CRM actions when a worker crashed after the send.
     if (activeBatch.outbound?.state === "sent") {
@@ -229,7 +239,9 @@ export async function handleConversationJob(
     }
 
     stage = "batch.resolve";
-    const batchText = await resolveBatchText(batch, services);
+    const batchText = services.config.ownerDialogueMode === "cooperation_only"
+      ? batch.every(message => message.type === "text") ? batch.map(message => message.text ?? "").join("\n").trim() : ""
+      : await resolveBatchText(batch, services);
     if (!batchText) {
       log.warn("batch.no_text");
       await services.store.ackBatch(key, activeBatch.batchKey);
@@ -267,6 +279,8 @@ export async function handleConversationJob(
       for (const message of batch) await appendHistory(services.store, key,
         { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
         { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
+      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+        throw new Error("conversation lock lost before terminal acknowledgement");
       await services.store.ackBatch(key, activeBatch.batchKey);
       await runTrace.record(runId, "terminal", { messageIds: batch.map(message => message.idMessage), listings: allowedListings.map(compactListing) });
       return outcome("terminal", runId);
@@ -285,6 +299,48 @@ export async function handleConversationJob(
       await services.store.ackBatch(key, activeBatch.batchKey);
       await runTrace.record(runId, "manager_takeover", {});
       return outcome("skipped", runId);
+    }
+    if (services.config.ownerDialogueMode === "cooperation_only") {
+      stage = "cooperation.status";
+      let checkpoint = activeBatch.agentCheckpoint;
+      if (!checkpoint) {
+        const lastOutgoing = history.findLast(entry => entry.role === "assistant");
+        // Never reinterpret an old availability-only question as consent.
+        const decision = lastOutgoing?.content.includes(COOPERATION_QUESTION) ? cooperationDecision(batchText) : null;
+        checkpoint = {
+          mode: "cooperation_only", completedActions: 0, reply: "", finalized: true,
+          result: { reply: "", stopConversation: !!decision,
+            actions: decision ? [{ type: "set_crm_status", listingId: primaryListing.id, status: decision }] : [] },
+        };
+        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+      }
+      const action = checkpoint.result.actions[0];
+      if (action && checkpoint.completedActions === 0) {
+        if (action.type !== "set_crm_status" || !["agreed", "disagreed"].includes(action.status))
+          throw new Error("invalid cooperation checkpoint");
+        if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+          throw new Error("conversation lock lost before cooperation status");
+        const latestListings = await services.crm.getListingsByPhone(phone);
+        const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
+        const target = filterListingsByManager(latestListings, instance.managerId, services.config.allowedManagerIds)
+          .find(listing => String(listing.id) === String(action.listingId));
+        if (!target || isTerminalListing(target, services.config.terminalCrmStatuses) && target.crm_status !== action.status ||
+            assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover) {
+          await services.store.ackBatch(key, activeBatch.batchKey);
+          return outcome("skipped", runId);
+        }
+        await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
+        checkpoint.completedActions = 1;
+        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+      }
+      for (const message of batch) await appendHistory(services.store, key,
+        { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
+        { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
+      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+        throw new Error("conversation lock lost before cooperation acknowledgement");
+      await services.store.ackBatch(key, activeBatch.batchKey);
+      log.info({ decision: action?.type === "set_crm_status" ? action.status : "manual_review" }, "cooperation.completed");
+      return outcome("processed", runId, { executedActions: action ? ["set_crm_status"] : [], reply: "", stopConversation: !!action });
     }
     const phase = resolvePhase(primaryListing.crm_status);
     const systemPrompt = buildSystemPrompt({ crm: { phone, contact: null, listings }, listings, primaryListing, phase, writableListingIds: allowedListings.map(listing => listing.id) });

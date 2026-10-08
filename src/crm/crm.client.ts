@@ -43,7 +43,7 @@ export interface CrmClient {
   setStatus(
     listingId: string | number,
     status: CrmStatus,
-    options?: { suppressTelegram?: boolean },
+    options?: { suppressTelegram?: boolean; cooperationOnly?: boolean },
   ): Promise<void>;
   setContactType(phone: string, contactType: ContactType): Promise<void>;
   updateDealInfo(phone: string, listingId: string | number, data: DealInfoUpdate): Promise<void>;
@@ -164,13 +164,14 @@ export class RealCrmClient implements CrmClient {
   async setStatus(
     listingId: string | number,
     status: CrmStatus,
-    options?: { suppressTelegram?: boolean },
+    options?: { suppressTelegram?: boolean; cooperationOnly?: boolean },
   ): Promise<void> {
     const url = `${this.base}/status/set`;
     const body = {
       id: listingId,
       status,
       ...(options?.suppressTelegram ? { suppress_telegram: true } : {}),
+      ...(options?.cooperationOnly ? { cooperation_only: true } : {}),
     };
     const { status: httpStatus, json } = await requestJson(
       url,

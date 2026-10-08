@@ -50,6 +50,7 @@ const envSchema = z.object({
   LLM_FREQUENCY_PENALTY: z.coerce.number().min(0).max(2).default(0.5),
   LLM_TOP_P: z.coerce.number().min(0).max(1).default(0.9),
   TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
+  OWNER_DIALOGUE_MODE: z.enum(["full", "cooperation_only"]).default("full"),
 
   // Фильтр «диалоги нашего агента»: основной режим — флаг assigned_manager_is_ai
   // от CRM (менеджер с Manager.is_ai, назначается при первой отправке).
@@ -101,6 +102,7 @@ export interface Config {
   llmFrequencyPenalty: number;
   llmTopP: number;
   transcriptionModel: string;
+  ownerDialogueMode: "full" | "cooperation_only";
 
   instances: InstanceConfig[];
 
@@ -183,11 +185,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     llmFrequencyPenalty: e.LLM_FREQUENCY_PENALTY,
     llmTopP: e.LLM_TOP_P,
     transcriptionModel: e.TRANSCRIPTION_MODEL,
+    ownerDialogueMode: e.OWNER_DIALOGUE_MODE,
 
     instances,
 
     allowedManagerIds: parseCsvNumbers(e.ALLOWED_MANAGER_IDS),
-    terminalCrmStatuses: parseCsv(e.TERMINAL_CRM_STATUSES).map((s) => s.toLowerCase()),
+    terminalCrmStatuses: [...parseCsv(e.TERMINAL_CRM_STATUSES).map((s) => s.toLowerCase()),
+      ...(e.OWNER_DIALOGUE_MODE === "cooperation_only" ? ["agreed"] : [])],
 
     mockExternals: e.MOCK_EXTERNALS,
     mockCrm,
