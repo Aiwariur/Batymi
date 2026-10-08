@@ -27,6 +27,7 @@ export const crmStatusSchema = z.preprocess(
     "agreed",
     "qualified",
     "disagreed",
+    "realtor",
     "sold",
     "archived",
     "no_whatsapp",

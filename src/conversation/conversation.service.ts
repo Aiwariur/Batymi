@@ -64,6 +64,8 @@ export function filterListingsByManager(
   instanceManagerId: number | undefined,
   allowedManagerIds: number[],
 ): Listing[] {
+  // Telegram-intake partners are approved agents, not acquisition targets.
+  listings = listings.filter(listing => (listing.contact_type ?? "").toLowerCase() !== "partner");
   if (instanceManagerId !== undefined) {
     return listings.filter((listing) => listing.assigned_manager_is_ai !== false && Number(listing.assigned_manager_id) === instanceManagerId);
   }
@@ -126,7 +128,9 @@ export function finalizeAgentResponse(input: GuardAgentResponseInput) {
     phase: input.phase, selectedListingId: input.result.selectedListingId,
     contactListingCount: input.contactListingCount,
   });
-  return { gate, reply: input.result.reply.trim(), stopConversation: input.result.stopConversation || gate.allowed.some(action => action.type === "update_rental_terms" && action.data.availability_status === "rented") };
+  return { gate, reply: input.result.reply.trim(), stopConversation: input.result.stopConversation || gate.allowed.some(action =>
+    action.type === "set_crm_status" && action.status === "realtor" ||
+    action.type === "update_rental_terms" && action.data.availability_status === "rented") };
 }
 export async function handleConversationJob(
   input: ConversationJobInput,
@@ -320,7 +324,13 @@ export async function handleConversationJob(
         ? checkpoint.result.selectedListingId ?? primaryListing.id
         : action.listingId ?? primaryListing.id;
       const writableNow = filterListingsByManager(updatedListings, instance.managerId, services.config.allowedManagerIds);
+      const currentTarget = writableNow.find(listing => String(listing.id) === String(targetId));
+      const alreadyAppliedTerminalAction = currentTarget && (
+        action.type === "set_crm_status" && currentTarget.crm_status === action.status ||
+        action.type === "set_contact_type" && currentTarget.contact_type === action.contactType
+      );
       if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
+          currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !alreadyAppliedTerminalAction ||
           !writableNow.some(listing => String(listing.id) === String(targetId))) {
         log.info("conversation.manager_takeover.before_action");
         await services.store.ackBatch(key, activeBatch.batchKey);
@@ -370,7 +380,15 @@ export async function handleConversationJob(
       const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
       const latestListings = await services.crm.getListingsByPhone(phone);
       const targetId = checkpoint.result.selectedListingId ?? primaryListing.id;
+      const currentTarget = latestListings.find(listing => String(listing.id) === String(targetId));
+      // A batch may send its own closing answer after persisting a terminal
+      // action. A manager closing the contact while the LLM ran must win.
+      const closedByThisBatch = currentTarget && checkpoint.result.actions.slice(0, checkpoint.completedActions).some(action =>
+        action.type === "set_crm_status" && action.status === currentTarget.crm_status ||
+        action.type === "set_contact_type" && action.contactType === "realtor" && currentTarget.contact_type === "realtor" ||
+        action.type === "update_rental_terms" && action.data.availability_status === "rented" && currentTarget.rental_terms?.availability_status === "rented");
       if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
+          currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !closedByThisBatch ||
           !filterListingsByManager(latestListings, instance.managerId, services.config.allowedManagerIds)
             .some(listing => String(listing.id) === String(targetId))) {
         log.info("conversation.manager_takeover.before_send");

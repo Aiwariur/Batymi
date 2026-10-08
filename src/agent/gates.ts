@@ -211,12 +211,19 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
   // second pass so an LLM cannot qualify before a later write in the same
   // batch, and rejected/unscoped actions cannot contribute to completeness.
   for (const action of actions) {
-    if ((ctx.contactListingCount ?? ctx.listings.length) > 1 && (ctx.selectedListingId === undefined ||
+    // This reason belongs to the whole Contact; selecting an apartment must
+    // not delay exclusion of a confirmed outside agent.
+    const contactRealtorAction = action.type === "set_crm_status" && action.status === "realtor";
+    if (!contactRealtorAction && actions.some(item => item.type === "set_crm_status" && item.status === "realtor")) {
+      reject(action, "realtor_dialog_closed");
+      continue;
+    }
+    if (!contactRealtorAction && (ctx.contactListingCount ?? ctx.listings.length) > 1 && (ctx.selectedListingId === undefined ||
       !listingIds.has(String(ctx.selectedListingId)))) {
       reject(action, "listing_selection_required");
       continue;
     }
-    if (action.type !== "set_contact_type" && (ctx.contactListingCount ?? ctx.listings.length) > 1 &&
+    if (!contactRealtorAction && action.type !== "set_contact_type" && (ctx.contactListingCount ?? ctx.listings.length) > 1 &&
       String(action.listingId) !== String(ctx.selectedListingId)) {
       reject(action, "action_targets_unselected_listing");
       continue;
@@ -306,7 +313,7 @@ export function applyGates(actions: AgentAction[], ctx: GateContext): GateResult
           reject(action, "status_already_agreed");
           break;
         }
-        const target = resolveListingId(statusAction.listingId, ctx, listingIds);
+        const target = resolveListingId(statusAction.listingId ?? (status === "realtor" ? ctx.primaryListingId : undefined), ctx, listingIds);
         if ("reason" in target) {
           reject(action, target.reason);
           break;

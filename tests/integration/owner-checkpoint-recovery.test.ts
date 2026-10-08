@@ -72,6 +72,26 @@ function senderRecorder() {
 }
 
 describe("production owner checkpoint recovery", () => {
+  it.each([true, false])("respects a manager's realtor mark during planning (with actions: %s)", async withActions => {
+    const harness = createHarness({ MESSAGE_DEBOUNCE_MS: "1" });
+    const sender = senderRecorder();
+    harness.services.sender = sender;
+    harness.crm.setContactState(PHONE, { status: "delivered", contactType: "potential_owner" });
+    const setType = vi.spyOn(harness.crm, "setContactType");
+    harness.llm.responder = () => {
+      harness.crm.setContactState(PHONE, { status: "realtor" });
+      return JSON.stringify({
+        reply: "Вы согласны сотрудничать?", stopConversation: false,
+        actions: withActions ? [{ type: "set_contact_type", contactType: "owner" }] : [],
+      });
+    };
+    await enqueueOwnerMessage(harness, "Я собственник");
+    expect((await runScheduled(harness)).status).toBe("skipped");
+    expect(setType).not.toHaveBeenCalled();
+    expect(sender.calls).toHaveLength(0);
+    expect((await harness.crm.getListingsByPhone(PHONE))[0].crm_status).toBe("realtor");
+  });
+
   it("resumes after qualified status when the final model call fails, without replaying status", async () => {
     const harness = readyHarness();
     const sender = senderRecorder();

@@ -20,7 +20,7 @@ export interface HistoryEntry {
   sender?: string;
 }
 
-export type ContactType = "owner" | "realtor" | "potential_owner";
+export type ContactType = "owner" | "realtor" | "potential_owner" | "partner";
 
 /**
  * Полный словарь crm_status арендной CRM (Contact.crm_status).

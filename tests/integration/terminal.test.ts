@@ -16,6 +16,48 @@ function stubCrm(listings: Listing[]): CrmClient {
 }
 
 describe("terminal and manager filtering", () => {
+  it("marks a multi-listing realtor without asking which apartment, then stays silent", async () => {
+    const harness = createHarness({ TERMINAL_CRM_STATUSES: "disagreed,archived,no_whatsapp" });
+    const phone = "+995555700008";
+    harness.crm.setContactState(phone, {
+      status: "delivered", contactType: "potential_owner",
+      listings: [{ id: 101 }, { id: 102 }] as never,
+    });
+    harness.llm.responder = messages => JSON.stringify(
+      messages.some(message => message.role === "system" && message.content.startsWith("CRM_EXECUTION_RESULTS:"))
+        ? { reply: "Спасибо, до свидания.", actions: [], stopConversation: true }
+        : { reply: "Спасибо, до свидания.", actions: [{ type: "set_crm_status", status: "realtor" }], stopConversation: false },
+    );
+    const instanceId = harness.config.instances[0].id;
+    const chatId = "995555700008@c.us";
+    await harness.ingest(harness.makeMessage({ instanceId, chatId, text: "Я риэлтор, сдаю эти квартиры" }));
+    const first = (await harness.scheduler.runAll())[0];
+    expect(first?.status).toBe("processed");
+    expect(first?.stopConversation).toBe(true);
+    expect((await harness.crm.getListingsByPhone(phone)).map(listing => listing.crm_status)).toEqual(["realtor", "realtor"]);
+    expect(harness.debug.snapshot().outgoing).toHaveLength(1);
+    const modelCalls = harness.llm.calls.length;
+    await harness.ingest(harness.makeMessage({ instanceId, chatId, text: "Есть новости?" }));
+    expect((await harness.scheduler.runAll())[0]?.status).toBe("terminal");
+    expect(harness.llm.calls).toHaveLength(modelCalls);
+    expect(harness.debug.snapshot().outgoing).toHaveLength(1);
+  });
+
+  it("leaves Telegram partners outside owner outreach even with an AI manager", async () => {
+    const harness = createHarness();
+    harness.services.crm = stubCrm([
+      { id: 1, crm_status: "new", contact_type: "partner", assigned_manager_id: 2, assigned_manager_is_ai: true },
+    ]);
+    await harness.ingest(harness.makeMessage({
+      instanceId: harness.config.instances[0].id,
+      chatId: "995555700009@c.us", text: "Я агент, добавил квартиру через Telegram",
+    }));
+    expect((await harness.scheduler.runAll())[0]?.status).toBe("skipped");
+    expect(harness.llm.calls).toHaveLength(0);
+    expect(harness.debug.snapshot().outgoing).toHaveLength(0);
+    expect(harness.debug.snapshot().crmActions).toHaveLength(0);
+  });
+
   it("keeps removed contacts silent even if not configured as terminal", async () => {
     const harness = createHarness({ TERMINAL_CRM_STATUSES: "disagreed,archived,no_whatsapp" });
     harness.services.crm = stubCrm([
