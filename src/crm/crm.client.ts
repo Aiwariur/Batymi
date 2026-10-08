@@ -63,6 +63,7 @@ export interface CrmInteraction {
   sent_at: string | null;
   message_id?: string | null;
   instance_id?: string | null;
+  notes?: string | null;
 }
 
 export function formatContactPhone(phone: string): string {

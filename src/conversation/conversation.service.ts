@@ -13,7 +13,7 @@ import { debounceTtlMs } from "../buffer/keys";
 import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 import { assembleCrmHistory } from "./crm-history";
 import { runTrace } from "../observability/run-trace";
-import { cooperationDecision, COOPERATION_QUESTION } from "./cooperation-only";
+import { cooperationDecision, COOPERATION_QUESTION, asksWhichApartment, cooperationListing, apartmentClarification } from "./cooperation-only";
 
 const MAX_MANUAL_RETRIES = 2;
 
@@ -212,7 +212,7 @@ export async function handleConversationJob(
     // Switching to handoff mode cancels already planned qualification replies.
     // Ambiguous sends were quarantined above and still require reconciliation.
     if (services.config.ownerDialogueMode === "cooperation_only" &&
-        (activeBatch.outbound || activeBatch.agentCheckpoint && activeBatch.agentCheckpoint.mode !== "cooperation_only")) {
+        (activeBatch.outbound || activeBatch.agentCheckpoint) && activeBatch.agentCheckpoint?.mode !== "cooperation_only") {
       await services.store.ackBatch(key, activeBatch.batchKey);
       log.info("cooperation.old_plan_cancelled");
       return outcome("skipped", runId);
@@ -225,7 +225,7 @@ export async function handleConversationJob(
       await appendHistory(
         services.store,
         key,
-        { role: "assistant", content: activeBatch.outbound.message, ts: Date.now() },
+        { role: "assistant", content: activeBatch.outbound.message, ts: Date.now(), messageId: activeBatch.outbound.idMessage, sender: "agent" },
         {
           maxMessages: services.config.conversationHistoryMaxMessages,
           ttlSeconds: services.config.conversationHistoryTtlSeconds,
@@ -300,17 +300,21 @@ export async function handleConversationJob(
       await runTrace.record(runId, "manager_takeover", {});
       return outcome("skipped", runId);
     }
+    let checkpoint = activeBatch.agentCheckpoint;
+    const executed: string[] = [];
     if (services.config.ownerDialogueMode === "cooperation_only") {
       stage = "cooperation.status";
-      let checkpoint = activeBatch.agentCheckpoint;
       if (!checkpoint) {
         const lastOutgoing = history.findLast(entry => entry.role === "assistant");
         // Never reinterpret an old availability-only question as consent.
-        const decision = lastOutgoing?.content.includes(COOPERATION_QUESTION) ? cooperationDecision(batchText) : null;
+        const hasCooperationQuestion = !!lastOutgoing?.content.includes(COOPERATION_QUESTION);
+        const target = cooperationListing(interactions, allowedListings, instanceId);
+        const decision = hasCooperationQuestion && target ? cooperationDecision(batchText) : null;
+        const reply = hasCooperationQuestion && target && asksWhichApartment(batchText) ? apartmentClarification(target) : "";
         checkpoint = {
-          mode: "cooperation_only", completedActions: 0, reply: "", finalized: true,
-          result: { reply: "", stopConversation: !!decision,
-            actions: decision ? [{ type: "set_crm_status", listingId: primaryListing.id, status: decision }] : [] },
+          mode: "cooperation_only", completedActions: 0, reply, finalized: true,
+          result: { reply, stopConversation: !!decision, selectedListingId: target?.id,
+            actions: decision ? [{ type: "set_crm_status", listingId: target?.id ?? primaryListing.id, status: decision }] : [] },
         };
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
@@ -333,105 +337,99 @@ export async function handleConversationJob(
         checkpoint.completedActions = 1;
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
-      for (const message of batch) await appendHistory(services.store, key,
-        { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
-        { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
-      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
-        throw new Error("conversation lock lost before cooperation acknowledgement");
-      await services.store.ackBatch(key, activeBatch.batchKey);
+      if (action) executed.push("set_crm_status");
       log.info({ decision: action?.type === "set_crm_status" ? action.status : "manual_review" }, "cooperation.completed");
-      return outcome("processed", runId, { executedActions: action ? ["set_crm_status"] : [], reply: "", stopConversation: !!action });
-    }
-    const phase = resolvePhase(primaryListing.crm_status);
-    const systemPrompt = buildSystemPrompt({ crm: { phone, contact: null, listings }, listings, primaryListing, phase, writableListingIds: allowedListings.map(listing => listing.id) });
-    let checkpoint = activeBatch.agentCheckpoint;
-    const benignRejections = new Set(["no_changes_vs_crm", "no_fields_to_write", "unchanged_contact_type", "status_already_agreed", "unchanged_crm_status"]);
-    if (!checkpoint) {
-      stage = "llm.plan";
-      let plan = await runAgent(services.llm, log, { systemPrompt, history, batchText,
-        onRaw: raw => runTrace.record(runId, "model.plan", { raw }) });
-      let guarded = finalizeAgentResponse({ result: plan.result, phase, history, batchText, listings: allowedListings, primaryListing, contactListingCount: listings.length });
-      let errors = guarded.gate.rejected.filter(item => !benignRejections.has(item.reason));
-      if (errors.length) {
-        await runTrace.record(runId, "actions.rejected", { errors });
-        if (plan.repaired) throw new AgentOutputError("actions invalid after format repair", plan.raw);
-        plan = await runAgent(services.llm, log, { systemPrompt, history, batchText, feedback: errors, previousRaw: plan.raw, allowRepair: false,
-          onRaw: raw => runTrace.record(runId, "model.repair", { raw }) });
-        guarded = finalizeAgentResponse({ result: plan.result, phase, history, batchText, listings: allowedListings, primaryListing, contactListingCount: listings.length });
-        errors = guarded.gate.rejected.filter(item => !benignRejections.has(item.reason));
-        if (errors.length) throw new Error("actions rejected after bounded repair: " + errors.map(item => item.reason).join(","));
+    } else {
+      const phase = resolvePhase(primaryListing.crm_status);
+      const systemPrompt = buildSystemPrompt({ crm: { phone, contact: null, listings }, listings, primaryListing, phase, writableListingIds: allowedListings.map(listing => listing.id) });
+      const benignRejections = new Set(["no_changes_vs_crm", "no_fields_to_write", "unchanged_contact_type", "status_already_agreed", "unchanged_crm_status"]);
+      if (!checkpoint) {
+        stage = "llm.plan";
+        let plan = await runAgent(services.llm, log, { systemPrompt, history, batchText,
+          onRaw: raw => runTrace.record(runId, "model.plan", { raw }) });
+        let guarded = finalizeAgentResponse({ result: plan.result, phase, history, batchText, listings: allowedListings, primaryListing, contactListingCount: listings.length });
+        let errors = guarded.gate.rejected.filter(item => !benignRejections.has(item.reason));
+        if (errors.length) {
+          await runTrace.record(runId, "actions.rejected", { errors });
+          if (plan.repaired) throw new AgentOutputError("actions invalid after format repair", plan.raw);
+          plan = await runAgent(services.llm, log, { systemPrompt, history, batchText, feedback: errors, previousRaw: plan.raw, allowRepair: false,
+            onRaw: raw => runTrace.record(runId, "model.repair", { raw }) });
+          guarded = finalizeAgentResponse({ result: plan.result, phase, history, batchText, listings: allowedListings, primaryListing, contactListingCount: listings.length });
+          errors = guarded.gate.rejected.filter(item => !benignRejections.has(item.reason));
+          if (errors.length) throw new Error("actions rejected after bounded repair: " + errors.map(item => item.reason).join(","));
+        }
+        await runTrace.record(runId, "actions.accepted", { allowed: guarded.gate.allowed, omittedNoops: guarded.gate.rejected });
+        checkpoint = { result: { ...plan.result, actions: guarded.gate.allowed, stopConversation: guarded.stopConversation }, completedActions: 0 };
+        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
-      await runTrace.record(runId, "actions.accepted", { allowed: guarded.gate.allowed, omittedNoops: guarded.gate.rejected });
-      checkpoint = { result: { ...plan.result, actions: guarded.gate.allowed, stopConversation: guarded.stopConversation }, completedActions: 0 };
-      await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
-    }
 
-    stage = "crm.update";
-    const executed: string[] = checkpoint.result.actions.slice(0, checkpoint.completedActions).map(action => action.type);
-    let updatedListings = allowedListings;
-    for (let index = checkpoint.completedActions; index < checkpoint.result.actions.length; index++) {
-      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
-        throw new Error("conversation lock lost before CRM action");
-      // Re-read and compare before retrying a write whose response/checkpoint was lost.
-      updatedListings = await services.crm.getListingsByPhone(phone);
-      const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
-      const action = checkpoint.result.actions[index];
-      const targetId = action.type === "set_contact_type"
-        ? checkpoint.result.selectedListingId ?? primaryListing.id
-        : action.listingId ?? primaryListing.id;
-      const writableNow = filterListingsByManager(updatedListings, instance.managerId, services.config.allowedManagerIds);
-      const currentTarget = writableNow.find(listing => String(listing.id) === String(targetId));
-      const alreadyAppliedTerminalAction = currentTarget && (
-        action.type === "set_crm_status" && currentTarget.crm_status === action.status ||
-        action.type === "set_contact_type" && currentTarget.contact_type === action.contactType
-      );
-      if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
-          currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !alreadyAppliedTerminalAction ||
-          !writableNow.some(listing => String(listing.id) === String(targetId))) {
-        log.info("conversation.manager_takeover.before_action");
-        await services.store.ackBatch(key, activeBatch.batchKey);
-        return outcome("skipped", runId);
-      }
-      const gate = applyGates([action], {
-        listings: writableNow, primaryListingId: primaryListing.id,
-        phase: resolvePhase(updatedListings[0]?.crm_status), selectedListingId: checkpoint.result.selectedListingId,
-        contactListingCount: updatedListings.length,
-      });
-      const errors = gate.rejected.filter(item => !benignRejections.has(item.reason));
-      if (errors.length) throw new Error("CRM state changed before action: " + errors.map(item => item.reason).join(","));
-      if (gate.allowed.length) {
-        const names = await executeActions(gate.allowed, { crm: services.crm, logger: log, debug: services.debug, phone, primaryListingId: primaryListing.id });
-        executed.push(...names);
-      }
-      updatedListings = await services.crm.getListingsByPhone(phone);
-      await runTrace.record(runId, "crm.action_result", { index, action, success: true, noOp: !gate.allowed.length, crmAfter: updatedListings.map(compactListing) });
-      checkpoint.completedActions = index + 1;
-      await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
-    }
-    let safeReply = checkpoint.reply;
-    let safeStopConversation = checkpoint.result.stopConversation;
-    if (!checkpoint.finalized) {
-      if (checkpoint.result.actions.length) {
+      stage = "crm.update";
+      executed.push(...checkpoint.result.actions.slice(0, checkpoint.completedActions).map(action => action.type));
+      let updatedListings = allowedListings;
+      for (let index = checkpoint.completedActions; index < checkpoint.result.actions.length; index++) {
+        if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+          throw new Error("conversation lock lost before CRM action");
+        // Re-read and compare before retrying a write whose response/checkpoint was lost.
         updatedListings = await services.crm.getListingsByPhone(phone);
-        stage = "llm.final";
-        const final = await runAgent(services.llm, log, { systemPrompt, history, batchText,
-          executionResults: { results: checkpoint.result.actions.map(action => ({ action, success: true })), crmAfter: updatedListings.map(compactListing), proposedReply: checkpoint.result.reply },
-          onRaw: raw => runTrace.record(runId, "model.final", { raw }) });
-        safeReply = final.result.reply.trim();
-        safeStopConversation = final.result.stopConversation || checkpoint.result.stopConversation;
-      } else safeReply = checkpoint.result.reply.trim();
-      if (!safeReply) throw new Error("model final reply is empty");
-      checkpoint.reply = safeReply;
-      checkpoint.result.stopConversation = safeStopConversation;
-      checkpoint.finalized = true;
-      await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+        const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
+        const action = checkpoint.result.actions[index];
+        const targetId = action.type === "set_contact_type"
+          ? checkpoint.result.selectedListingId ?? primaryListing.id
+          : action.listingId ?? primaryListing.id;
+        const writableNow = filterListingsByManager(updatedListings, instance.managerId, services.config.allowedManagerIds);
+        const currentTarget = writableNow.find(listing => String(listing.id) === String(targetId));
+        const alreadyAppliedTerminalAction = currentTarget && (
+          action.type === "set_crm_status" && currentTarget.crm_status === action.status ||
+          action.type === "set_contact_type" && currentTarget.contact_type === action.contactType
+        );
+        if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
+            currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !alreadyAppliedTerminalAction ||
+            !writableNow.some(listing => String(listing.id) === String(targetId))) {
+          log.info("conversation.manager_takeover.before_action");
+          await services.store.ackBatch(key, activeBatch.batchKey);
+          return outcome("skipped", runId);
+        }
+        const gate = applyGates([action], {
+          listings: writableNow, primaryListingId: primaryListing.id,
+          phase: resolvePhase(updatedListings[0]?.crm_status), selectedListingId: checkpoint.result.selectedListingId,
+          contactListingCount: updatedListings.length,
+        });
+        const errors = gate.rejected.filter(item => !benignRejections.has(item.reason));
+        if (errors.length) throw new Error("CRM state changed before action: " + errors.map(item => item.reason).join(","));
+        if (gate.allowed.length) {
+          const names = await executeActions(gate.allowed, { crm: services.crm, logger: log, debug: services.debug, phone, primaryListingId: primaryListing.id });
+          executed.push(...names);
+        }
+        updatedListings = await services.crm.getListingsByPhone(phone);
+        await runTrace.record(runId, "crm.action_result", { index, action, success: true, noOp: !gate.allowed.length, crmAfter: updatedListings.map(compactListing) });
+        checkpoint.completedActions = index + 1;
+        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+      }
+      if (!checkpoint.finalized) {
+        let safeReply: string;
+        let safeStopConversation = checkpoint.result.stopConversation;
+        if (checkpoint.result.actions.length) {
+          updatedListings = await services.crm.getListingsByPhone(phone);
+          stage = "llm.final";
+          const final = await runAgent(services.llm, log, { systemPrompt, history, batchText,
+            executionResults: { results: checkpoint.result.actions.map(action => ({ action, success: true })), crmAfter: updatedListings.map(compactListing), proposedReply: checkpoint.result.reply },
+            onRaw: raw => runTrace.record(runId, "model.final", { raw }) });
+          safeReply = final.result.reply.trim();
+          safeStopConversation = final.result.stopConversation || checkpoint.result.stopConversation;
+        } else safeReply = checkpoint.result.reply.trim();
+        if (!safeReply) throw new Error("model final reply is empty");
+        checkpoint.reply = safeReply;
+        checkpoint.result.stopConversation = safeStopConversation;
+        checkpoint.finalized = true;
+        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+      }
     }
     for (const message of batch) await appendHistory(services.store, key,
       { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
       { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
 
     stage = "crm.reply";
-    const reply = safeReply;
+    const reply = checkpoint.reply;
     if (reply) {
       const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
       const latestListings = await services.crm.getListingsByPhone(phone);
@@ -513,13 +511,13 @@ export async function handleConversationJob(
     }
     await services.store.ackBatch(key, activeBatch.batchKey);
     log.info(
-      { duration: Date.now() - startedAt, actions: executed.length, stopConversation: safeStopConversation },
+      { duration: Date.now() - startedAt, actions: executed.length, stopConversation: checkpoint.result.stopConversation },
       "run.completed",
     );
     return outcome("processed", runId, {
       executedActions: executed,
       reply,
-      stopConversation: safeStopConversation,
+      stopConversation: checkpoint.result.stopConversation,
     });
   } catch (error) {
     failed = true;

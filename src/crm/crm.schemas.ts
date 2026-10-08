@@ -10,6 +10,7 @@ export const interactionsResponseSchema = z.object({
     sent_at: z.string().nullable(),
     message_id: z.string().nullable().optional(),
     instance_id: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
   })),
 });
 

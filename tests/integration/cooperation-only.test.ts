@@ -1,20 +1,144 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHarness } from "../helpers/harness";
-import { COOPERATION_QUESTION, cooperationDecision } from "../../src/conversation/cooperation-only";
+import { COOPERATION_QUESTION, cooperationDecision, asksWhichApartment, apartmentClarification } from "../../src/conversation/cooperation-only";
 
 function harnessWithOutreach(question = COOPERATION_QUESTION) {
   const h = createHarness({ OWNER_DIALOGUE_MODE: "cooperation_only", TERMINAL_CRM_STATUSES: "" });
   const instanceId = h.config.instances[0].id;
   const phone = "+995555700090";
-  h.crm.setContactState(phone, { status: "new", listings: [{ id: 101 }, { id: 102 }] as never });
+  h.crm.setContactState(phone, { status: "new", listings: [
+    { id: 101, address: "Кобаладзе 12", url: "https://example.com/flat/101" },
+    { id: 102, address: "Пиросмани 8", url: "https://example.com/flat/102" },
+  ] as never });
   vi.spyOn(h.services.crm, "getInteractions").mockResolvedValue([
     { id: 1, direction: "outgoing", sender: null, instance_id: instanceId,
-      sent_at: "2026-10-08T00:00:00Z", text: "Здравствуйте! " + question },
+      sent_at: "2026-10-08T00:00:00Z", text: "Здравствуйте! " + question, notes: "cooperation_outreach:v1:101" },
   ]);
   return { h, phone, instanceId, message: (text: string) => h.makeMessage({ instanceId, chatId: phone.slice(1) + "@c.us", text }) };
 }
 
 describe("cooperation-only owner handoff", () => {
+  it.each(["Какая квартира?", "Здравствуйте! Что за квартира?", "Какой адрес?", "Пришлите ссылку на объявление"])("answers %s with the original apartment, then accepts consent", async text => {
+    const { h, phone, message } = harnessWithOutreach();
+    await h.ingest(message(text));
+    await h.scheduler.runAll();
+    const outgoing = h.debug.snapshot().outgoing;
+    expect(outgoing).toHaveLength(1);
+    expect(outgoing[0].message).toContain("Кобаладзе 12");
+    expect(outgoing[0].message).toContain("https://example.com/flat/101");
+    expect(outgoing[0].message).not.toContain("Пиросмани");
+    expect(outgoing[0].message).toContain(COOPERATION_QUESTION);
+    expect((await h.crm.getListingsByPhone(phone))[0].crm_status).toBe("new");
+    await h.ingest(message("да"));
+    await h.scheduler.runAll();
+    expect((await h.crm.getListingsByPhone(phone))[0].crm_status).toBe("agreed");
+    expect(h.debug.snapshot().outgoing).toHaveLength(1);
+    expect(h.llm.calls).toHaveLength(0);
+  });
+
+  it("uses the outreach marker even when the source is not the primary listing", async () => {
+    const { h, instanceId, message } = harnessWithOutreach();
+    vi.mocked(h.services.crm.getInteractions).mockResolvedValue([
+      { id: 1, direction: "outgoing", sender: null, instance_id: instanceId, notes: "cooperation_outreach:v1:102",
+        sent_at: "2026-10-08T00:00:00Z", text: COOPERATION_QUESTION },
+    ]);
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    await h.ingest(message("Какая квартира?"));
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing[0].message).toContain("https://example.com/flat/102");
+    await h.ingest(message("да"));
+    await h.scheduler.runAll();
+    expect(setStatus).toHaveBeenCalledWith(102, "agreed", { suppressTelegram: true, cooperationOnly: true });
+  });
+
+  it.each([undefined, "cooperation_outreach:v1:999"])("does not guess an apartment for an unresolved marker %s", async notes => {
+    const { h, instanceId, message } = harnessWithOutreach();
+    vi.mocked(h.services.crm.getInteractions).mockResolvedValue([
+      { id: 1, direction: "outgoing", sender: null, instance_id: instanceId, notes,
+        sent_at: "2026-10-08T00:00:00Z", text: COOPERATION_QUESTION },
+    ]);
+    await h.ingest(message("Какая квартира?"));
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+  });
+
+  it("rechecks manager takeover before sending the apartment link", async () => {
+    const { h, instanceId, message } = harnessWithOutreach();
+    const rows = await h.services.crm.getInteractions("", instanceId);
+    vi.mocked(h.services.crm.getInteractions).mockResolvedValueOnce(rows).mockResolvedValue([
+      ...rows, { id: 2, direction: "outgoing", sender: "manager", instance_id: instanceId,
+        sent_at: "2026-10-08T00:01:00Z", text: "Обсудим вручную" },
+    ]);
+    await h.ingest(message("Какая квартира?"));
+    expect((await h.scheduler.runAll())[0]?.status).toBe("skipped");
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
+
+  it("quarantines an uncertain clarification send and never repeats it", async () => {
+    const { h, message } = harnessWithOutreach();
+    const sender = vi.spyOn(h.services.sender, "sendMessage").mockRejectedValue(new Error("response lost"));
+    await h.ingest(message("Какая квартира?"));
+    await h.scheduler.runAll();
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+  });
+
+  it("quarantines a history failure after a clarification without sending twice", async () => {
+    const { h, message } = harnessWithOutreach();
+    const append = h.store.appendHistory.bind(h.store);
+    let failed = false;
+    vi.spyOn(h.store, "appendHistory").mockImplementation(async (...args) => {
+      if (args[1].role === "assistant" && !failed) {
+        failed = true;
+        throw new Error("history storage interrupted after send");
+      }
+      return append(...args);
+    });
+    await h.ingest(message("Какая квартира?"));
+    const results = await h.scheduler.runAll();
+    expect(results.at(-1)?.status).toBe("quarantined");
+    await h.ingest(message("Пришлите ссылку"));
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing).toHaveLength(1);
+    expect(h.llm.calls).toHaveLength(0);
+  });
+
+  it("recovers a confirmed cooperation clarification intent after a process crash", async () => {
+    const { h, instanceId, message } = harnessWithOutreach();
+    const inbound = message("Какая квартира?");
+    await h.ingest(inbound);
+    const key = h.key(instanceId, inbound.chatId);
+    await h.store.drainPending(key);
+    const active = (await h.store.getActiveBatch(key))!;
+    const reply = apartmentClarification({ id: 101, address: "Кобаладзе 12", url: "https://example.com/flat/101" });
+    await h.store.saveAgentCheckpoint(key, active.batchKey, {
+      mode: "cooperation_only", completedActions: 0, finalized: true, reply,
+      result: { reply, stopConversation: false, actions: [], selectedListingId: 101 },
+    });
+    const intent = await h.store.prepareOutboundIntent({ conversationKey: key, batchKey: active.batchKey,
+      instanceId, chatId: inbound.chatId, message: reply });
+    await h.store.claimOutboundIntent(key, intent.intentId);
+    await h.store.markOutboundSent(key, intent.intentId, "already-confirmed");
+    const result = (await h.scheduler.runAll())[0];
+    expect(result?.status).toBe("processed");
+    expect(result?.reply).toBe(reply);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    expect(h.llm.calls).toHaveLength(0);
+  });
+
+  it("can identify a single listing from old unmarked cooperation outreach", async () => {
+    const { h, phone, instanceId, message } = harnessWithOutreach();
+    h.crm.setContactState(phone, { status: "new", listings: [{ id: 101, address: "Кобаладзе 12" }] as never });
+    vi.mocked(h.services.crm.getInteractions).mockResolvedValue([
+      { id: 1, direction: "outgoing", sender: null, instance_id: instanceId,
+        sent_at: "2026-10-08T00:00:00Z", text: COOPERATION_QUESTION },
+    ]);
+    await h.ingest(message("Какая квартира?"));
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing[0].message).toContain("Кобаладзе 12");
+  });
+
   it.each(["Да", "Здравствуйте! Да, согласен", "da", "yes", "კი"])("persists consent %s contact-wide and never replies", async text => {
     const { h, phone, message } = harnessWithOutreach();
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
@@ -114,6 +238,13 @@ describe("cooperation-only owner handoff", () => {
 });
 
 describe("conservative reply vocabulary", () => {
+  it("leaves compound business questions manual", () => {
+    expect(asksWhichApartment("Какая квартира? Какая комиссия?")).toBe(false);
+    expect(asksWhichApartment("Да, какая квартира?")).toBe(false);
+    expect(apartmentClarification({ id: 1 })).toBe("");
+    expect(apartmentClarification({ id: 1, url: "javascript:alert(1)" })).toBe("");
+    expect(apartmentClarification({ id: 1, address: "Кобаладзе 12" })).toContain(COOPERATION_QUESTION);
+  });
   it.each(["нет", "Нет, спасибо", "net", "no", "არა"])("recognizes %s", text => expect(cooperationDecision(text)).toBe("disagreed"));
   it("rejects negative/conditional tails instead of using a substring yes", () => {
     expect(cooperationDecision("да но нет" )).toBeNull();
