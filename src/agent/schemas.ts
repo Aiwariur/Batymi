@@ -37,7 +37,7 @@ export const crmStatusSchema = z.preprocess(
 /** Только эти статусы LLM вправе выставить через set_crm_status. */
 export const agentCrmStatusSchema = z.preprocess(
   lower,
-  z.enum(["agreed", "qualified", "disagreed"]),
+  z.enum(["agreed", "qualified", "disagreed", "realtor"]),
 ) as unknown as z.ZodType<AgentCrmStatus>;
 
 const nonEmptyTrimmed = z

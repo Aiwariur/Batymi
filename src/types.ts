@@ -35,13 +35,14 @@ export type CrmStatus =
   | "agreed"
   | "qualified"
   | "disagreed"
+  | "realtor"
   | "sold"
   | "archived"
   | "no_whatsapp"
   | "listing_removed";
 
 /** Статусы, доступные LLM-агенту через set_crm_status. */
-export type AgentCrmStatus = "agreed" | "qualified" | "disagreed";
+export type AgentCrmStatus = "agreed" | "qualified" | "disagreed" | "realtor";
 
 /**
  * Фаза диалога по crm_status:

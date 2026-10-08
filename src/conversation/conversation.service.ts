@@ -86,7 +86,7 @@ function managerAllowedForAgent(listing: Listing, allowedManagerIds: number[]): 
 
 export function isTerminalListing(listing: Listing, terminalStatuses: string[]): boolean {
   const status = (listing.crm_status ?? "").toLowerCase();
-  if (status === "listing_removed" || status === "qualified" || status === "disagreed" || terminalStatuses.includes(status)) return true;
+  if (status === "listing_removed" || status === "qualified" || status === "disagreed" || status === "realtor" || terminalStatuses.includes(status)) return true;
   if ((listing.contact_type ?? "").toLowerCase() === "realtor") return true;
   if (["rented", "withdrawn"].includes(listing.rental_terms?.availability_status ?? "")) return true;
   return false;

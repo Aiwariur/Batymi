@@ -4,9 +4,9 @@ import {
   isTerminalListing,
   parseConversationKey,
 } from "../../src/conversation/conversation.service";
-import { resolvePhase } from "../../src/agent/system-prompt";
+import { resolvePhase, buildSystemPrompt } from "../../src/agent/system-prompt";
 import { executeActions, matchComplex } from "../../src/agent/actions";
-import { Listing } from "../../src/types";
+import { CrmContext, Listing } from "../../src/types";
 import { CrmClient, ResidentialComplex } from "../../src/crm/crm.client";
 import { InMemoryDebugRecorder } from "../../src/observability/debug-recorder";
 import { createLogger } from "../../src/observability/logger";
@@ -34,6 +34,11 @@ describe("business rules", () => {
     const terminal = ["disagreed", "archived", "no_whatsapp"];
     expect(isTerminalListing(listing({ contact_type: "realtor" }), terminal)).toBe(true);
     expect(isTerminalListing(listing({ contact_type: "owner" }), terminal)).toBe(false);
+  });
+
+  it("treats confirmed realtor status as terminal", () => {
+    const terminal = ["disagreed", "archived", "no_whatsapp"];
+    expect(isTerminalListing(listing({ crm_status: "realtor" }), terminal)).toBe(true);
   });
 
   it("resolves conversation phase from crm_status", () => {
@@ -218,4 +223,50 @@ describe("executeActions", () => {
     expect(crm.setStatus).toHaveBeenCalledWith(101, "agreed", { suppressTelegram: true });
   });
 
+});
+
+describe("realtor agent branch", () => {
+  const logger = createLogger({ level: "silent", pretty: false });
+
+  it("system prompt routes realtor replies to set_crm_status realtor", () => {
+    const prompt = buildSystemPrompt({
+      crm: {} as CrmContext,
+      listings: [listing({ id: 101 })],
+      primaryListing: listing({ id: 101 }),
+      phase: "primary",
+    });
+    expect(prompt).toContain("риелтор → set_crm_status realtor");
+    expect(prompt).toContain("agreed|qualified|disagreed|realtor");
+  });
+
+  it("system prompt allows realtor for multi-listing contacts", () => {
+    const prompt = buildSystemPrompt({
+      crm: {} as CrmContext,
+      listings: [listing({ id: 101 }), listing({ id: 102 })],
+      primaryListing: listing({ id: 101 }),
+      phase: "primary",
+    });
+    expect(prompt).toContain("agreed|disagreed|realtor");
+  });
+
+  it("executes set_crm_status realtor against the CRM", async () => {
+    const calls: string[] = [];
+    const crm = {
+      setStatus: vi.fn(async (id: number, status: string) => {
+        calls.push(`status:${id}:${status}`);
+      }),
+      getComplexes: vi.fn(async () => []),
+    } as unknown as CrmClient;
+    await executeActions(
+      [{ type: "set_crm_status", status: "realtor" }],
+      {
+        crm,
+        logger,
+        debug: new InMemoryDebugRecorder(),
+        phone: "+995555123456",
+        primaryListingId: 101,
+      },
+    );
+    expect(calls).toContain("status:101:realtor");
+  });
 });

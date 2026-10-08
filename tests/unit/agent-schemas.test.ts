@@ -32,6 +32,21 @@ describe("agent action schemas", () => {
     ).toBe(true);
   });
 
+  it("accepts realtor status but keeps engine-only statuses rejected", () => {
+    expect(
+      actionSchema.safeParse({ type: "set_crm_status", status: "realtor" }).success,
+    ).toBe(true);
+    expect(
+      actionSchema.safeParse({ type: "set_crm_status", status: "REALTOR" }).success,
+    ).toBe(true);
+    expect(
+      actionSchema.safeParse({ type: "set_crm_status", status: "archived" }).success,
+    ).toBe(false);
+    expect(
+      actionSchema.safeParse({ type: "set_crm_status", status: "new" }).success,
+    ).toBe(false);
+  });
+
   it("rejects arbitrary tool calls", () => {
     expect(
       actionSchema.safeParse({ type: "send_http_request", url: "https://x" }).success,

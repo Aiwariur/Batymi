@@ -56,7 +56,7 @@ const envSchema = z.object({
   // Список ниже — легаси-fallback для старой CRM без флага; пусто = все менеджеры.
   ALLOWED_MANAGER_IDS: z.string().default(""),
   // Статусы, в которых движок не отвечает и не зовёт LLM.
-  TERMINAL_CRM_STATUSES: z.string().default("qualified,disagreed,archived,no_whatsapp"),
+  TERMINAL_CRM_STATUSES: z.string().default("qualified,disagreed,realtor,archived,no_whatsapp"),
 
   MOCK_EXTERNALS: boolFromString(true),
   MOCK_CRM: boolOptional(),
