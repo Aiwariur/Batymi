@@ -4,6 +4,8 @@ import { TestInteraction } from "../helpers/owner-dialogue-server";
 
 export interface OwnerDialogueTurn {
   ownerText: string;
+  /** Separate inbound messages coalesced by the debounce buffer in this turn. */
+  ownerMessages?: string[];
   plannedReply: string;
   finalReply?: string;
   actions: AgentAction[];
@@ -53,6 +55,16 @@ const action = (value: AgentAction) => value;
 
 /** Each owner input, model action proposal, and expected post-turn state is explicit. */
 export const ownerDialogueCorpus: OwnerDialogueScenario[] = [
+  {
+    id: "initial-outreach-greeting-net", title: "Greeting and bare net decline the actual first outreach and stop",
+    initialStatus: "new",
+    initialRentalTerms: { price: 450, availability_status: "unknown" },
+    initialInteractions: [{ id: "outreach-net", text: "Добрый день! Наткнулся на ваше объявление «Сдается в аренду 1-комнатная квартира площадью 44 м² в Батуми, Aisi. Цена аренды — $450 в месяц». Объявление ещё актуально? Интересует долгосрочная аренда", sender: "agent", direction: "outbound", sent_at: "2026-10-08T07:34:21Z", whatsapp_instance_id: "acceptance-instance" }],
+    turns: [
+      { ownerText: "dobri den\nnet", ownerMessages: ["dobri den", "net"], plannedReply: "Ponyal, spasibo za otvet. Khoroshego dnya!", actions: [action({ type: "update_deal_info", listingId: 101, data: { agent_notes: "На первое обращение об актуальности объявления и долгосрочной аренде ответил: dobri den / net. Причина отказа не указана." } }), action({ type: "set_crm_status", status: "disagreed" })], expect: { status: "disagreed", contactType: null, fields: { "rental_terms.availability_status": "unknown" }, replyExcludes: ["?", "собственник", "sobstvennik", "owner"], stopConversation: true, sendCount: 1, runModel: true } },
+      { ownerText: "spasibo", plannedReply: "", actions: [], expect: { status: "disagreed", sendCount: 1, runStatus: "terminal", runModel: false } },
+    ],
+  },
   {
     id: "bare-yes-current-rental", title: "Bare yes answers only the actual rental question",
     initialInteractions: [{ id: "outreach-1", text: "Здравствуйте! Ваша квартира ещё сдаётся на длительный срок?", sender: "agent", direction: "outbound", sent_at: "2026-10-01T10:00:00Z", whatsapp_instance_id: "acceptance-instance" }],

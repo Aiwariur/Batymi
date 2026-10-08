@@ -10,6 +10,14 @@ const logger = {
 } as unknown as Logger;
 
 describe("agent structured-output contract", () => {
+  it.each(["json", ""])("accepts a complete %s JSON fence without an extra model call", async (label) => {
+    const proposal = { reply: "Понял, спасибо.", actions: [{ type: "set_crm_status", status: "disagreed" }], stopConversation: true };
+    const llm = { complete: vi.fn().mockResolvedValue(`\`\`\`${label}\n${JSON.stringify(proposal)}\n\`\`\``) };
+    const output = await runAgent(llm, logger, { systemPrompt: "prompt", history: [], batchText: "net" });
+    expect(output.result).toEqual(proposal);
+    expect(output.repaired).toBe(false);
+    expect(llm.complete).toHaveBeenCalledTimes(1);
+  });
   it("returns an action error alongside the previous proposal so selection survives repair", async () => {
     const previousRaw = JSON.stringify({ reply: "Проект", selectedListingId: 202,
       actions: [{ type: "set_crm_status", listingId: 202, status: "qualified" }], stopConversation: true });
@@ -30,6 +38,7 @@ describe("agent structured-output contract", () => {
 
   it.each([
     ["malformed JSON", "not json"],
+    ["JSON fence mixed with prose", 'Here is the answer:\n```json\n{"reply":"Thanks","actions":[],"stopConversation":true}\n```'],
     ["schema-invalid action", JSON.stringify({
       reply: "Thanks",
       actions: [{ type: "update_rental_terms", data: { price: 900, commission_type: "percentage" } }],

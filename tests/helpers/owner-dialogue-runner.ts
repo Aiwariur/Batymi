@@ -130,14 +130,18 @@ export async function runOwnerDialogueTurn(
   const modelCallsBefore = runtime.modelCallCount();
   const modelOutputStart = runtime.modelOutputs().length;
   const id = `owner-dialogue-${sequence}`;
-  runtime.crm.addOwnerMessage(turn.ownerText, id, "acceptance-instance");
-  const message: NormalizedMessage = {
-    instanceId: "acceptance-instance", idMessage: id, chatId: "995599123456@c.us", senderPhone: "995599123456",
-    type: "text", text: turn.ownerText, timestamp: Date.now() + sequence, rawType: "textMessage",
-  };
-  await ingestMessage(message, services);
+  const ownerMessages = turn.ownerMessages ?? [turn.ownerText];
+  if (ownerMessages.join("\n") !== turn.ownerText) throw new Error("ownerMessages must match ownerText");
+  const messages: NormalizedMessage[] = ownerMessages.map((text, index) => ({
+    instanceId: "acceptance-instance", idMessage: ownerMessages.length === 1 ? id : `${id}-${index}`, chatId: "995599123456@c.us", senderPhone: "995599123456",
+    type: "text", text, timestamp: Date.now() + sequence + index, rawType: "textMessage",
+  }));
+  for (const message of messages) {
+    runtime.crm.addOwnerMessage(message.text!, message.idMessage, "acceptance-instance");
+    await ingestMessage(message, services);
+  }
   let duplicateAccepted: boolean | undefined;
-  if (turn.duplicateWebhook) duplicateAccepted = (await ingestMessage(message, services)).accepted;
+  if (turn.duplicateWebhook) duplicateAccepted = (await ingestMessage(messages[messages.length - 1], services)).accepted;
   if (turn.failCrmWrite) runtime.crm.failNextWrite = true;
   const token = await services.store.getDebounce(key);
   if (!token) throw new Error(`missing debounce token for ${turn.ownerText}`);

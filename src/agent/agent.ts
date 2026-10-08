@@ -33,7 +33,11 @@ export async function runAgent(llm: LlmProvider, logger: Logger, input: RunAgent
     raw = await llm.complete(messages);
     await input.onRaw?.(raw);
     try {
-      const result = agentResultSchema.parse(JSON.parse(raw.trim()));
+      // Some OpenAI-compatible providers wrap valid JSON despite json_object.
+      // Accept only a complete JSON fence; prose and partial objects still fail.
+      const text = raw.trim();
+      const fenced = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+      const result = agentResultSchema.parse(JSON.parse(fenced ? fenced[1].trim() : text));
       if (final && result.actions.length > 0) throw new Error("final_response_actions_must_be_empty");
       if (result.actions.length === 0 && !result.reply.trim()) throw new Error("empty final reply");
       logger.info({ actions: result.actions.length, final }, "llm.completed");
