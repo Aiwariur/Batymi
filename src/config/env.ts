@@ -40,6 +40,7 @@ const envSchema = z.object({
   GREENAPI_WEBHOOK_SECRET: z.string().trim().default(""),
   // GreenAPI's native webhookUrlToken is sent as Authorization: Bearer ...
   GREENAPI_WEBHOOK_SECRET_HEADER: z.string().trim().min(1).default("authorization"),
+  GREENAPI_INSTANCE_SOURCE: z.enum(["env", "crm"]).default("env"),
 
   LLM_PROVIDER: z.string().default("openai"),
   LLM_MODEL: z.string().default("gpt-4.1"),
@@ -105,6 +106,7 @@ export interface Config {
   ownerDialogueMode: "full" | "cooperation_only";
 
   instances: InstanceConfig[];
+  instanceSource: "env" | "crm";
 
   allowedManagerIds: number[];
   terminalCrmStatuses: string[];
@@ -188,6 +190,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ownerDialogueMode: e.OWNER_DIALOGUE_MODE,
 
     instances,
+    instanceSource: e.GREENAPI_INSTANCE_SOURCE,
 
     allowedManagerIds: parseCsvNumbers(e.ALLOWED_MANAGER_IDS),
     terminalCrmStatuses: [...parseCsv(e.TERMINAL_CRM_STATUSES).map((s) => s.toLowerCase()),

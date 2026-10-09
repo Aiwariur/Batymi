@@ -8,6 +8,7 @@ import { LlmProvider } from "./agent/llm.provider";
 import { TranscriptionService } from "./transcription/transcription.service";
 import { Logger } from "./observability/logger";
 import { DebugRecorder } from "./observability/debug-recorder";
+import { CrmInstanceRegistry } from "./crm/instance-registry";
 
 export interface Services {
   config: Config;
@@ -20,4 +21,5 @@ export interface Services {
   llm: LlmProvider;
   transcription: TranscriptionService;
   debug: DebugRecorder;
+  instanceRegistry?: CrmInstanceRegistry;
 }

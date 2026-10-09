@@ -18,6 +18,7 @@ import { createTranscriptionService } from "./transcription/transcription.servic
 import { createRedisConnection, createStoreConnection } from "./queue/connection";
 import { buildApp, RuntimeState } from "./app";
 import { Services } from "./services";
+import { CrmInstanceRegistry } from "./crm/instance-registry";
 
 async function waitForRedis(redis: IORedis, logger: Logger, attempts = 30): Promise<void> {
   for (let i = 1; i <= attempts; i += 1) {
@@ -37,6 +38,8 @@ async function main(): Promise<void> {
   const logger = createLogger({ level: config.logLevel, pretty: !config.isProduction });
 
   logger.info({ nodeEnv: config.nodeEnv }, "Application starting");
+  const instanceRegistry = config.instanceSource === "crm" ? new CrmInstanceRegistry(config) : undefined;
+  await instanceRegistry?.refresh(true);
   logger.info({ instances: config.instances.length }, "GreenAPI instances loaded");
   if (config.mockExternals) {
     logger.warn("MOCK_EXTERNALS enabled - external services are mocked");
@@ -63,7 +66,13 @@ async function main(): Promise<void> {
     llm: createLlmProvider(config, logger),
     transcription: createTranscriptionService(config, logger),
     debug,
+    instanceRegistry,
   };
+
+  const registryTimer = instanceRegistry ? setInterval(() => {
+    void instanceRegistry.refresh().catch(error => logger.warn({ err: (error as Error).message }, "crm.instances.refresh_failed"));
+  }, 30000) : undefined;
+  registryTimer?.unref();
 
   const runtime: RuntimeState = { redisConnected: true, workerStarted: false };
   let storeRedisHealthy = true;
@@ -126,6 +135,7 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, "Application shutting down");
+    if (registryTimer) clearInterval(registryTimer);
     try {
       if (app) await app.close();
       if (worker) await worker.close();

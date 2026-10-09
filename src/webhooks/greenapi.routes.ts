@@ -93,7 +93,14 @@ export function registerGreenApiRoutes(app: FastifyInstance, services: Services)
       return { ok: false, error: "unauthorized webhook" };
     }
 
-    const instance = services.config.instances.find((i) => i.id === instanceId);
+    let instance;
+    try {
+      instance = services.instanceRegistry ? await services.instanceRegistry.resolve(instanceId)
+        : services.config.instances.find((i) => i.id === instanceId);
+    } catch {
+      reply.code(503);
+      return { ok: false, error: "CRM instance registry unavailable" };
+    }
     if (!instance) {
       reply.code(404);
       return { ok: false, error: "unknown GreenAPI instance" };

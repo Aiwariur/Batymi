@@ -230,7 +230,7 @@ GreenAPI instances ──► POST /webhooks/greenapi/:instanceId
 | GREENAPI Trigger (обе фазы) | `POST /webhooks/greenapi/:instanceId` + normalizer + прокси в CRM |
 | Redis counter/timestamp/wait/pop | `buffer/` (debounce через BullMQ + Redis token) |
 | Get flat by phone (`/flat/by-phone`) | `crm.client.getListingsByPhone` (+ `rental_terms`) |
-| Check manager (`== 2`) | `assigned_manager_is_ai` из CRM (менеджер с `is_ai`) / `ALLOWED_MANAGER_IDS` (легаси) / `managerId` на instance |
+| Check manager (`== 2`) | CRM `assigned_manager_is_ai` remains authoritative; `ALLOWED_MANAGER_IDS` is a legacy fallback, and an optional instance `managerId` further restricts eligible contacts |
 | N8N_AGENT_PROMPT (фаза 1, gpt-4o-mini) | `system-prompt.ts` → primary-фаза |
 | N8N_AGENT_AGREED_PROMPT (фаза 2) | `system-prompt.ts` → agreed-фаза |
 | tools (get_flat/set_status/set_type/update_deal/list_complexes) | 4 structured-действия + гейты + матчинг ЖК в коде |
@@ -262,6 +262,9 @@ Batymi только **принимает** вебхуки и проксируе�
 (и опциональный `managerId`):
 
 ```env
+# Source: env (default) or crm. Production Compose selects crm.
+GREENAPI_INSTANCE_SOURCE=crm
+
 # Вариант A: JSON-массив (рекомендуется)
 GREENAPI_INSTANCES=[{"id":"7107577616","managerId":2}]
 
@@ -269,6 +272,17 @@ GREENAPI_INSTANCES=[{"id":"7107577616","managerId":2}]
 GREENAPI_INSTANCE_1_ID=
 GREENAPI_INSTANCE_1_MANAGER_ID=
 ```
+
+With `GREENAPI_INSTANCE_SOURCE=crm`, Batymi loads the active WhatsApp instance
+registry from the authenticated CRM endpoint `GET /api/whatsapp-instances` at
+startup, before starting the API and worker. The registry refreshes every 30
+seconds; an unknown webhook instance triggers a forced refresh. Inactive CRM
+rows are excluded. An explicit `managerId` in `GREENAPI_INSTANCES` is retained
+as an optional restriction on eligible contacts for that instance; it is not a
+CRM instance-manager field. The CRM's `assigned_manager_is_ai` contact gate
+remains authoritative. This requires no additional CRM UI setup.
+With `env`, the static `GREENAPI_INSTANCES` or numbered variables remain the
+source as before.
 
 В real mode входящий webhook принимается только с токеном GreenAPI
 `webhookUrlToken`: по умолчанию это заголовок `Authorization: Bearer <secret>`.
@@ -295,6 +309,7 @@ from GreenAPI; the Batymi-to-CRM header stays Bearer-compatible.
 ```env
 CRM_BASE_URL=https://admin.batumi-key.homes/api
 CRM_API_KEY=            # N8N_API_KEY этой CRM (X-API-Key)
+GREENAPI_INSTANCE_SOURCE=crm # production Compose default; env remains code default
 # Агент обслуживает диалоги, где ответственный — AI-менеджер (Manager.is_ai,
 # флаг assigned_manager_is_ai от CRM). ALLOWED_MANAGER_IDS — легаси-fallback
 # для старой CRM без флага (пусто = все менеджеры).
@@ -362,16 +377,28 @@ LLM_API_KEY=...    LLM_MODEL=...    LLM_BASE_URL=...
 GREENAPI_INSTANCES=[{"id":"<idInstance>","managerId":2}, ...]
 ```
 
+With `GREENAPI_INSTANCE_SOURCE=crm` (the production Compose default), omit
+`GREENAPI_INSTANCES` unless you need a per-instance `managerId` contact
+restriction. CRM supplies the active instance IDs automatically. The static
+example above applies when `GREENAPI_INSTANCE_SOURCE=env`.
+
 ### Чеклист подключения к прод (по команде, отдельно от кода)
 
 1. Вписать в `.env` прод-значения (см. Real mode выше).
 2. Поднять сервис (docker compose / Coolify) с Redis.
-3. В кабинете GreenAPI для каждого инстанса перевести
-   webhook URL с CRM на `https://<batymi-host>/webhooks/greenapi/<idInstance>`
+3. При rollout отдельно направить существующий webhook Bogdan через
+   `https://<batymi-host>/webhooks/greenapi/<idInstance>`
    (Batymi сам форвардит всё в CRM `/api/greenapi/webhook/<id>`).
 4. Проверить `GET /health/ready` и один тестовый диалог через
    `/debug/simulate-message` (только dev-режим).
 5. Убедиться, что в CRM появляются interactions (диалоги → has_reply).
+
+The CRM can default newly added lines to Batymi by setting
+`WHATSAPP_AGENT_WEBHOOK_BASE_URL=https://wa.batumi-key.homes/webhooks/greenapi`.
+The CRM appends the instance ID. Existing nonempty webhook URLs are preserved.
+Rollout aligns Bogdan's current line separately and does not replay or resend
+owner messages. No additional CRM UI setup is required; AI endpoint contracts
+are unchanged.
 
 ---
 

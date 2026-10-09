@@ -254,6 +254,7 @@ export async function handleConversationJob(
       log.debug({ batchText }, "batch.content");
     }
 
+    await services.instanceRegistry?.refresh();
     const instance = services.config.instances.find((i) => i.id === instanceId);
     if (!instance) throw new Error("unknown WhatsApp instance");
     const phone = batch[0].senderPhone;

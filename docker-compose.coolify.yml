@@ -18,7 +18,9 @@ services:
       - OWNER_DIALOGUE_MODE=${OWNER_DIALOGUE_MODE:-cooperation_only}
       # Общий секрет GreenAPI-ингресса (тот же, что у CRM ssge-rent)
       - GREENAPI_WEBHOOK_SECRET=${GREENAPI_WEBHOOK_SECRET:-}
-      # Allowlist инстансов GreenAPI: вебхуки прочих инстансов отбрасываются
+      # Активные линии берутся из настроек CRM; повторная регистрация не нужна.
+      - GREENAPI_INSTANCE_SOURCE=${GREENAPI_INSTANCE_SOURCE:-crm}
+      # Легаси-настройки / необязательная привязка существующей линии к менеджеру.
       - GREENAPI_INSTANCE_1_ID=${GREENAPI_INSTANCE_1_ID:-}
       - GREENAPI_INSTANCE_1_MANAGER_ID=${GREENAPI_INSTANCE_1_MANAGER_ID:-}
       # LLM (OpenAI-совместимый провайдер, значения из UI Coolify)
