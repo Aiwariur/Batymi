@@ -24,7 +24,7 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
       if (!config.crmBaseUrl) missing.push("CRM_BASE_URL");
       if (!config.crmApiKey) missing.push("CRM_API_KEY");
     }
-    if (config.ownerDialogueMode === "full" && !config.mockLlm && !config.llmApiKey) missing.push("LLM_API_KEY");
+    if (!config.mockLlm && !config.llmApiKey) missing.push("LLM_API_KEY");
     if ((config.isProduction || !config.mockGreenApi) && !config.webhookSecret) {
       missing.push("GREENAPI_WEBHOOK_SECRET");
     }

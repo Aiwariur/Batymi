@@ -13,7 +13,7 @@ import { debounceTtlMs } from "../buffer/keys";
 import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 import { assembleCrmHistory } from "./crm-history";
 import { runTrace } from "../observability/run-trace";
-import { cooperationDecision, COOPERATION_QUESTION, asksWhichApartment, cooperationListing, apartmentClarification } from "./cooperation-only";
+import { planCooperation } from "./cooperation-agent";
 
 const MAX_MANUAL_RETRIES = 2;
 
@@ -304,18 +304,16 @@ export async function handleConversationJob(
     const executed: string[] = [];
     if (services.config.ownerDialogueMode === "cooperation_only") {
       stage = "cooperation.status";
+      if (checkpoint?.mode === "cooperation_only" && !checkpoint.plannerVersion &&
+          !checkpoint.reply && checkpoint.result.actions.length === 0 && !activeBatch.outbound) checkpoint = undefined;
       if (!checkpoint) {
-        const lastOutgoing = history.findLast(entry => entry.role === "assistant");
-        // Never reinterpret an old availability-only question as consent.
-        const hasCooperationQuestion = !!lastOutgoing?.content.includes(COOPERATION_QUESTION);
-        const target = cooperationListing(interactions, allowedListings, instanceId);
-        const decision = hasCooperationQuestion && target ? cooperationDecision(batchText) : null;
-        const reply = hasCooperationQuestion && target && asksWhichApartment(batchText) ? apartmentClarification(target) : "";
+        stage = "cooperation.llm";
+        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId,
+          onRaw: raw => runTrace.record(runId, "cooperation.model", { raw }) });
         checkpoint = {
-          mode: "cooperation_only", completedActions: 0, reply, finalized: true,
-          result: { reply, stopConversation: !!decision, selectedListingId: target?.id,
-            actions: decision ? [{ type: "set_crm_status", listingId: target?.id ?? primaryListing.id, status: decision }] : [] },
+          mode: "cooperation_only", plannerVersion: "semantic_v1", completedActions: 0, reply: result.reply, finalized: true, result,
         };
+        log.info({ actions: result.actions.length, selectedListingId: result.selectedListingId, replyPlanned: !!result.reply }, "cooperation.model.completed");
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
       const action = checkpoint.result.actions[0];
@@ -338,7 +336,7 @@ export async function handleConversationJob(
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
       if (action) executed.push("set_crm_status");
-      log.info({ decision: action?.type === "set_crm_status" ? action.status : "manual_review" }, "cooperation.completed");
+      log.info({ decision: action?.type === "set_crm_status" ? action.status : checkpoint.reply ? "owner_reply" : "manual_review" }, "cooperation.completed");
     } else {
       const phase = resolvePhase(primaryListing.crm_status);
       const systemPrompt = buildSystemPrompt({ crm: { phone, contact: null, listings }, listings, primaryListing, phase, writableListingIds: allowedListings.map(listing => listing.id) });

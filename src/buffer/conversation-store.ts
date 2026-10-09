@@ -21,6 +21,7 @@ export interface OutboundIntent {
 /** Durable progress for the currently claimed inbound batch. */
 export interface AgentCheckpoint {
   mode?: "cooperation_only";
+  plannerVersion?: "semantic_v1";
   result: AgentResult;
   /** Number of accepted CRM actions that completed successfully, in order. */
   completedActions: number;
