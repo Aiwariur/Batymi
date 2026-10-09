@@ -318,7 +318,7 @@ export async function handleConversationJob(
       }
       const action = checkpoint.result.actions[0];
       if (action && checkpoint.completedActions === 0) {
-        if (action.type !== "set_crm_status" || !["agreed", "disagreed"].includes(action.status))
+        if (action.type !== "set_crm_status" || !["agreed", "disagreed", "realtor"].includes(action.status))
           throw new Error("invalid cooperation checkpoint");
         if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
           throw new Error("conversation lock lost before cooperation status");

@@ -69,6 +69,34 @@ describe("LLM cooperation handoff execution", () => {
     expect(h.llm.calls).toHaveLength(1);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
+  it("excludes a model-recognized Georgian realtor across all listings without selecting an apartment", async () => {
+    const { h, phone, message } = setup();
+    const farewell = "მადლობა ინტერესისთვის, ჩვენ ვთანამშრომლობთ პირდაპირ მესაკუთრეებთან.";
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    h.llm.responder = messages => {
+      expect(messages.at(-1)?.content).toBe("გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50");
+      return JSON.stringify({ reply: farewell, actions: [{ type: "set_crm_status", status: "realtor" }], stopConversation: true });
+    };
+    await h.ingest(message("გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50"));
+    await h.scheduler.runAll();
+    expect(setStatus).toHaveBeenCalledWith(101, "realtor", { suppressTelegram: true, cooperationOnly: true });
+    expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "realtor")).toBe(true);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([farewell]);
+    await h.ingest(message("Продолжим сотрудничество?"));
+    expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
+    expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(1);
+  });
+  it("does not exclude a Telegram partner", async () => {
+    const { h, phone, message } = setup();
+    h.crm.setContactState(phone, { contactType: "partner", listings: [{ id: 101 }, { id: 102 }] as never });
+    h.llm.responder = () => JSON.stringify({ reply: "", actions: [{ type: "set_crm_status", status: "realtor" }], stopConversation: true });
+    await h.ingest(message("Я агент, давайте 50/50"));
+    await h.scheduler.runAll();
+    expect(h.llm.calls).toHaveLength(0);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it.each(["qualified", "update_rental_terms", "unknown_listing", "invented_link"])("rejects model output %s without any writes or sends", async kind => {
     const { h, message } = setup();
     h.llm.responder = () => kind === "qualified" ? proposal("", "agreed").replace("agreed", "qualified")
