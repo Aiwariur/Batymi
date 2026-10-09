@@ -42,7 +42,7 @@ export type CrmStatus =
   | "listing_removed";
 
 /** Статусы, доступные LLM-агенту через set_crm_status. */
-export type AgentCrmStatus = "agreed" | "qualified" | "disagreed" | "realtor";
+export type AgentCrmStatus = "agreed" | "qualified" | "disagreed" | "realtor" | "listing_removed";
 
 /**
  * Фаза диалога по crm_status:

@@ -25,11 +25,14 @@ qualified`, сбор арендных условий конкретного List
 пуст, CRM отправляет прежний `COOPERATION_MESSAGE` без изменений. Исходящий Interaction содержит маркер
 `cooperation_outreach:v1:<listing_id>` в `notes`.
 
-В `cooperation_only` подключённая LLM понимает каждый текстовый batch и
+В `cooperation_only` подключённая LLM понимает каждый текстовый batch и аудио,
+предварительно расшифрованное существующим сервисом транскрибации. Она
 возвращает ограниченный результат: `reply`, необязательные `actions` только с
-`set_crm_status` (`agreed`/`disagreed`/`realtor`), `selectedListingId` и
+`set_crm_status` (`agreed`/`disagreed`/`realtor`/`listing_removed`), `selectedListingId` и
 `stopConversation`. В этом режиме нет квалификации или записи арендных/сделочных
-условий. Для `realtor` `selectedListingId` и `action.listingId` можно опустить:
+условий. `disagreed` означает только отказ сотрудничать; если собственник
+сообщил, что квартира уже сдана или больше недоступна, используй
+`listing_removed`. Для `realtor` `selectedListingId` и `action.listingId` можно опустить:
 Batymi подставит разрешённый Listing ID только как API-якорь для изменения
 статуса всего Contact (сам API требует `id`). Исходящий Interaction содержит
 `cooperation_outreach:v1:<listing_id>` в `notes`; если маркер присутствует,

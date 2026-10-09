@@ -14,11 +14,40 @@ function setup() {
   ]);
   return { h, instanceId, phone, message: (text: string) => h.makeMessage({ instanceId, chatId: phone.slice(1) + "@c.us", text }) };
 }
-const proposal = (reply = "", status?: "agreed" | "disagreed") => JSON.stringify({ reply,
+const proposal = (reply = "", status?: "agreed" | "disagreed" | "listing_removed") => JSON.stringify({ reply,
   selectedListingId: 102, stopConversation: !!status,
   actions: status ? [{ type: "set_crm_status", listingId: 102, status }] : [] });
 
 describe("LLM cooperation handoff execution", () => {
+  it.each([false, true])("transcribes cooperation audio and preserves accompanying text (mixed=%s)", async mixed => {
+    const { h, message } = setup();
+    const fileUrl = "https://greenapi.example/owner.ogg";
+    const transcribe = vi.spyOn(h.services.transcription, "transcribe").mockResolvedValue("Какая квартира вас интересует?");
+    const reply = "Квартира на Лермонтова 31. Готовы сотрудничать?";
+    h.llm.responder = messages => {
+      expect(messages.at(-1)?.content).toBe(mixed
+        ? "Здравствуйте\nКакая квартира вас интересует?" : "Какая квартира вас интересует?");
+      return proposal(reply);
+    };
+    if (mixed) await h.ingest(message("Здравствуйте"));
+    await h.ingest({ ...message(""), type: "audio", rawType: "audioMessage", text: undefined, fileUrl });
+    await h.scheduler.runAll();
+    expect(transcribe).toHaveBeenCalledWith(fileUrl);
+    expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+  });
+  it("applies consent from an audio transcript silently", async () => {
+    const { h, phone, message } = setup();
+    vi.spyOn(h.services.transcription, "transcribe").mockResolvedValue("Да, квартира актуальна, согласен сотрудничать");
+    h.llm.responder = messages => {
+      expect(messages.at(-1)?.content).toContain("согласен сотрудничать");
+      return proposal("", "agreed");
+    };
+    await h.ingest({ ...message(""), type: "audio", rawType: "audioMessage", text: undefined, fileUrl: "https://greenapi.example/yes.ogg" });
+    await h.scheduler.runAll();
+    expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "agreed")).toBe(true);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it("sends the model's apartment answer for the actual transliterated message without a dictionary", async () => {
     const { h, message } = setup();
     const reply = "Interesuet kvartira na Lermontova 31: https://example.com/flat/102. Gotovy sotrudnichat?";
@@ -33,7 +62,7 @@ describe("LLM cooperation handoff execution", () => {
     expect(h.debug.snapshot().outgoing[0].message).toBe(reply);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
-  it.each(["agreed", "disagreed"] as const)("executes model decision %s silently and stops future replies", async status => {
+  it.each(["agreed", "disagreed", "listing_removed"] as const)("executes model decision %s silently and stops future replies", async status => {
     const { h, phone, message } = setup();
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
     h.llm.responder = () => proposal("thanks", status);
@@ -44,6 +73,19 @@ describe("LLM cooperation handoff execution", () => {
     await h.ingest(message("Какая квартира?"));
     expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
     expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
+  it("closes an already rented apartment as listing_removed, not refusal", async () => {
+    const { h, message } = setup();
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    h.llm.responder = messages => {
+      expect(messages[0].content).toContain("недоступность объекта не означает отказ собственника сотрудничать");
+      expect(messages.at(-1)?.content).toBe("здравствуйте уже сдала");
+      return proposal("", "listing_removed");
+    };
+    await h.ingest(message("здравствуйте уже сдала"));
+    await h.scheduler.runAll();
+    expect(setStatus).toHaveBeenCalledWith(102, "listing_removed", { suppressTelegram: true, cooperationOnly: true });
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it("persists the model decision once across a lost CRM response", async () => {

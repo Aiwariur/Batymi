@@ -239,9 +239,12 @@ export async function handleConversationJob(
     }
 
     stage = "batch.resolve";
-    const batchText = services.config.ownerDialogueMode === "cooperation_only"
-      ? batch.every(message => message.type === "text") ? batch.map(message => message.text ?? "").join("\n").trim() : ""
-      : await resolveBatchText(batch, services);
+    const batchText = await resolveBatchText(
+      services.config.ownerDialogueMode === "cooperation_only"
+        ? batch.filter(message => message.type === "text" || message.type === "audio")
+        : batch,
+      services,
+    );
     if (!batchText) {
       log.warn("batch.no_text");
       await services.store.ackBatch(key, activeBatch.batchKey);
@@ -318,7 +321,7 @@ export async function handleConversationJob(
       }
       const action = checkpoint.result.actions[0];
       if (action && checkpoint.completedActions === 0) {
-        if (action.type !== "set_crm_status" || !["agreed", "disagreed", "realtor"].includes(action.status))
+        if (action.type !== "set_crm_status" || !["agreed", "disagreed", "realtor", "listing_removed"].includes(action.status))
           throw new Error("invalid cooperation checkpoint");
         if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
           throw new Error("conversation lock lost before cooperation status");
