@@ -62,4 +62,69 @@ describe("assembleCrmHistory", () => {
     expect(result.managerTakeover).toBe(true);
     expect(result.history[1]).toMatchObject({ content: "senderless legacy message", sender: "unknown" });
   });
+
+  it("keeps a saved voice transcript when CRM later supplies its audio placeholder", () => {
+    const sentAt = "2026-10-04T10:10:00Z";
+    const result = assembleCrmHistory(
+      [interaction({ id: 1, direction: "incoming", sender: null, sent_at: sentAt, text: "🎵 Аудио", message_id: "voice-1" })],
+      [{ role: "user", content: "Да, готов сотрудничать", ts: Date.parse(sentAt), messageId: "voice-1", sender: "owner" }],
+      [], "instance-a",
+    );
+
+    expect(result.history).toEqual([{
+      role: "user", content: "Да, готов сотрудничать", ts: Date.parse(sentAt), messageId: "voice-1", sender: "owner",
+    }]);
+  });
+
+  it("normalizes old Redis seconds before merging and sorting delayed CRM history", () => {
+    const result = assembleCrmHistory(
+      [interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Первое предложение", sender: null })],
+      [{ role: "user", content: "Ответ через минуту", ts: Date.parse("2026-10-04T10:01:00Z") / 1000, messageId: "delayed-owner" }],
+      [], "instance-a",
+    );
+
+    expect(result.history.map(row => row.content)).toEqual(["Первое предложение", "Ответ через минуту"]);
+    expect(result.history[1].ts).toBe(Date.parse("2026-10-04T10:01:00Z"));
+  });
+
+  it.each([
+    ["agent then phone then later agent", [
+      interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Agent outreach", sender: "agent" }),
+      interaction({ id: 2, sent_at: "2026-10-04T10:01:00Z", text: "Manual phone reply", sender: "phone" }),
+      interaction({ id: 3, sent_at: "2026-10-04T10:02:00Z", text: "Later bot reply", sender: "agent" }),
+    ]],
+    ["marked initial phone outreach then later phone message", [
+      interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Initial outreach", sender: "phone", notes: "cooperation_outreach:v1:42" }),
+      interaction({ id: 2, sent_at: "2026-10-04T10:01:00Z", text: "Owner replied", direction: "incoming", sender: null }),
+      interaction({ id: 3, sent_at: "2026-10-04T10:02:00Z", text: "Manual follow-up", sender: "phone" }),
+    ]],
+  ])("detects manual phone takeover for %s", (_label, rows) => {
+    expect(assembleCrmHistory(rows, [], [], "instance-a").managerTakeover).toBe(true);
+  });
+
+  it("allows the first owner reply after a marked phone outreach", () => {
+    const result = assembleCrmHistory(
+      [interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Initial outreach", sender: "phone", notes: "cooperation_outreach:v1:42" }),
+       interaction({ id: 2, sent_at: "2026-10-04T10:01:00Z", text: "Да", direction: "incoming", sender: null })],
+      [], [], "instance-a",
+    );
+    expect(result.managerTakeover).toBe(false);
+  });
+
+  it("treats even the first unmarked phone outbound as manual takeover", () => {
+    const result = assembleCrmHistory(
+      [interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Unmarked phone message", sender: "phone" })],
+      [], [], "instance-a",
+    );
+    expect(result.managerTakeover).toBe(true);
+  });
+
+  it("allows an incoming reply after a legacy API outreach with no sender", () => {
+    const result = assembleCrmHistory(
+      [interaction({ id: 1, sent_at: "2026-10-04T10:00:00Z", text: "Legacy API outreach", sender: null }),
+       interaction({ id: 2, direction: "incoming", sent_at: "2026-10-04T10:01:00Z", text: "Да", sender: null })],
+      [], [], "instance-a",
+    );
+    expect(result.managerTakeover).toBe(false);
+  });
 });

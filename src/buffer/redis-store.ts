@@ -43,7 +43,9 @@ if redis.call('EXISTS', KEYS[2]) == 1 then
 end
 if redis.call('EXISTS', KEYS[1]) == 1 then
   redis.call('RENAME', KEYS[1], KEYS[3])
-  redis.call('SET', KEYS[2], ARGV[1])
+  local active = cjson.decode(ARGV[1])
+  active.createdAt = tonumber(ARGV[2])
+  redis.call('SET', KEYS[2], cjson.encode(active))
   return 1
 end
 return 0
@@ -134,6 +136,17 @@ redis.call('SET', KEYS[1], cjson.encode(active))
 return 1
 `;
 
+const DEFER_RECOVERY_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw or redis.call('GET', KEYS[2]) ~= ARGV[3] then return -1 end
+local active = cjson.decode(raw)
+if active.batchKey ~= ARGV[1] then return -1 end
+active.retryNotBefore = tonumber(ARGV[2])
+active.recoveryFailureCount = (tonumber(active.recoveryFailureCount) or 0) + 1
+redis.call('SET', KEYS[1], cjson.encode(active))
+return active.recoveryFailureCount
+`;
+
 const MANUAL_HANDOFF_SCRIPT = `
 local raw = redis.call('GET', KEYS[1])
 if not raw or redis.call('GET', KEYS[3]) ~= ARGV[3] then return 0 end
@@ -145,6 +158,8 @@ return 1
 `;
 
 export class RedisConversationStore implements ConversationStore {
+  private conversationListOffset = 0;
+
   constructor(private readonly redis: Redis) {}
 
   async acceptInbound(input: {
@@ -197,6 +212,7 @@ export class RedisConversationStore implements ConversationStore {
       activeBatchKey(conversationKey),
       activeBatchMessagesKey(conversationKey),
       JSON.stringify({ batchKey: randomUUID() }),
+      String(Date.now()),
     );
     const raw = await this.redis.lrange(activeBatchMessagesKey(conversationKey), 0, -1);
     if (raw.length === 0) return [];
@@ -333,6 +349,52 @@ export class RedisConversationStore implements ConversationStore {
 
   async pendingCount(conversationKey: string): Promise<number> {
     return this.redis.llen(pendingKey(conversationKey));
+  }
+
+  async getPendingMessages(conversationKey: string): Promise<NormalizedMessage[]> {
+    const raw = await this.redis.lrange(pendingKey(conversationKey), 0, -1);
+    return raw.map((item) => JSON.parse(item) as NormalizedMessage);
+  }
+
+  async listConversations(limit = 100): Promise<string[]> {
+    const keys = new Set<string>();
+    for (const pattern of ["conversation:*:pending", "conversation:*:active"]) {
+      for await (const rawKey of this.redis.scanStream({ match: pattern })) {
+        const batch = Array.isArray(rawKey) ? rawKey : [rawKey];
+        for (const key of batch as string[]) {
+          if (!key.startsWith("conversation:")) continue;
+          const suffix = key.endsWith(":pending") ? ":pending" : key.endsWith(":active") ? ":active" : "";
+          if (suffix) keys.add(key.slice("conversation:".length, -suffix.length));
+        }
+      }
+    }
+    const all = [...keys];
+    if (!all.length) return [];
+    const start = this.conversationListOffset % all.length;
+    this.conversationListOffset = (start + Math.max(1, limit)) % all.length;
+    return Array.from({ length: Math.min(limit, all.length) }, (_, index) => all[(start + index) % all.length]);
+  }
+
+  async hasLock(conversationKey: string): Promise<boolean> {
+    return (await this.redis.exists(lockKey(conversationKey))) === 1;
+  }
+
+  async markManualReview(conversationKey: string, reason: string): Promise<void> {
+    await this.redis.set(manualHandoffKey(conversationKey), reason.slice(0, 500));
+  }
+
+  async deferRecovery(conversationKey: string, batchKey: string, retryNotBefore: number, lockToken: string): Promise<number> {
+    const result = Number(await this.redis.eval(
+      DEFER_RECOVERY_SCRIPT,
+      2,
+      activeBatchKey(conversationKey),
+      lockKey(conversationKey),
+      batchKey,
+      String(retryNotBefore),
+      lockToken,
+    ));
+    if (result < 1) throw new Error("active batch or conversation lock changed before retry backoff");
+    return result;
   }
 
   async setDebounce(conversationKey: string, token: string, ttlMs: number): Promise<void> {

@@ -11,6 +11,7 @@ import {
 } from "../types";
 import {
   complexesResponseSchema,
+  agentReviewResponseSchema,
   contactResponseSchema,
   dealResponseSchema,
   listingsResponseSchema,
@@ -44,7 +45,11 @@ export interface CrmClient {
     listingId: string | number,
     status: CrmStatus,
     options?: { suppressTelegram?: boolean; cooperationOnly?: boolean },
-  ): Promise<void>;
+  ): Promise<StatusWriteResult | void>;
+  reportReview?(
+    phone: string,
+    review: AgentReviewInput,
+  ): Promise<AgentReviewResult | undefined>;
   setContactType(phone: string, contactType: ContactType): Promise<void>;
   updateDealInfo(phone: string, listingId: string | number, data: DealInfoUpdate): Promise<void>;
   updateRentalTerms(
@@ -53,6 +58,28 @@ export interface CrmClient {
     data: RentalTermsUpdate,
   ): Promise<void>;
   getComplexes(): Promise<ResidentialComplex[]>;
+}
+
+export interface StatusWriteResult {
+  applied: boolean;
+  status?: string;
+}
+
+export interface AgentReviewInput {
+  issueId: string;
+  reason: string;
+  state: "open" | "review_required" | "resolved";
+  instanceId?: string;
+  listingId?: string | number;
+  messageId?: string;
+  errorPreview?: string;
+}
+
+export interface AgentReviewResult {
+  applied: boolean;
+  issueId: string;
+  status: "recorded" | "updated" | "resolved";
+  notification: "sent" | "failed" | "already_sent" | "unavailable" | "not_required";
 }
 
 export interface CrmInteraction {
@@ -166,7 +193,7 @@ export class RealCrmClient implements CrmClient {
     listingId: string | number,
     status: CrmStatus,
     options?: { suppressTelegram?: boolean; cooperationOnly?: boolean },
-  ): Promise<void> {
+  ): Promise<StatusWriteResult> {
     const url = `${this.base}/status/set`;
     const body = {
       id: listingId,
@@ -184,6 +211,22 @@ export class RealCrmClient implements CrmClient {
     if (!parsed.success) {
       throw new CrmError("CRM status response failed validation", httpStatus, false);
     }
+    return { applied: parsed.data.applied ?? true, status: parsed.data.status };
+  }
+
+  async reportReview(phone: string, review: AgentReviewInput): Promise<AgentReviewResult> {
+    const url = `${this.base}/contacts/${encodeURIComponent(formatContactPhone(phone))}/agent-review`;
+    const { status, json } = await requestJson(
+      url,
+      { method: "POST", body: JSON.stringify(review) },
+      this.config.crmApiKey,
+    );
+    assertOk(status, json);
+    const parsed = agentReviewResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new CrmError("CRM agent-review response failed validation", status, false);
+    }
+    return parsed.data;
   }
 
   async setContactType(phone: string, contactType: ContactType): Promise<void> {

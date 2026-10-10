@@ -124,8 +124,18 @@ export const statusResponseSchema = z
   .object({
     ok: z.boolean().optional(),
     success: z.boolean().optional(),
+    applied: z.boolean().optional(),
+    status: z.string().optional(),
   })
   .passthrough();
+
+export const agentReviewResponseSchema = z.object({
+  success: z.boolean(),
+  applied: z.boolean(),
+  issueId: z.string(),
+  status: z.enum(["recorded", "updated", "resolved"]),
+  notification: z.enum(["sent", "failed", "already_sent", "unavailable", "not_required"]),
+});
 
 export const dealResponseSchema = z
   .object({

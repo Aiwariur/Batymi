@@ -13,7 +13,7 @@ import { debounceTtlMs } from "../buffer/keys";
 import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 import { assembleCrmHistory } from "./crm-history";
 import { runTrace } from "../observability/run-trace";
-import { planCooperation } from "./cooperation-agent";
+import { planCooperation, COOPERATION_PLANNER_VERSION } from "./cooperation-agent";
 
 const MAX_MANUAL_RETRIES = 2;
 
@@ -105,7 +105,10 @@ async function resolveBatchText(
       parts.push(message.text);
     } else if (message.type === "audio" && message.fileUrl) {
       const transcript = await services.transcription.transcribe(message.fileUrl);
-      if (transcript) parts.push(transcript);
+      if (transcript) {
+        message.text = transcript;
+        parts.push(transcript);
+      }
     } else if ((message.type === "image" || message.type === "document") && message.text) {
       parts.push(message.text);
     }
@@ -148,7 +151,7 @@ export async function handleConversationJob(
 
   if (!isRetry) {
     const currentToken = await services.store.getDebounce(key);
-    if (input.token && currentToken !== input.token) {
+    if (input.token && currentToken !== null && currentToken !== input.token) {
       log.info("debounce.stale.skip");
       return outcome("skipped", runId);
     }
@@ -158,8 +161,9 @@ export async function handleConversationJob(
   if (!lock) {
     log.warn("lock.busy.reschedule");
     if (isRetry) throw new Error("conversation is locked by another worker");
-    await services.store.setDebounce(key, input.token, debounceTtlMs(services.config.messageDebounceMs));
-    await services.scheduler.schedule(key, input.token, 1000, input.retryCount ?? 0);
+    const nextToken = randomUUID();
+    await services.store.setDebounce(key, nextToken, debounceTtlMs(services.config.messageDebounceMs));
+    await services.scheduler.schedule(key, nextToken, 1000, input.retryCount ?? 0);
     return outcome("rescheduled", runId);
   }
 
@@ -249,21 +253,7 @@ export async function handleConversationJob(
       return outcome("processed", runId, { reply: activeBatch.outbound.message });
     }
 
-    stage = "batch.resolve";
-    const batchText = await resolveBatchText(
-      services.config.ownerDialogueMode === "cooperation_only"
-        ? batch.filter(message => message.type === "text" || message.type === "audio")
-        : batch,
-      services,
-    );
-    if (!batchText) {
-      log.warn("batch.no_text");
-      await services.store.ackBatch(key, activeBatch.batchKey);
-      return outcome("empty", runId);
-    }
-    if (services.config.logMessageContent) {
-      log.debug({ batchText }, "batch.content");
-    }
+    let batchText = "";
 
     await services.instanceRegistry?.refresh();
     const instance = services.config.instances.find((i) => i.id === instanceId);
@@ -292,7 +282,7 @@ export async function handleConversationJob(
       isTerminalListing(listing, services.config.terminalCrmStatuses))) {
       log.info({ crmStatus: primaryListing.crm_status }, "conversation.terminal");
       for (const message of batch) await appendHistory(services.store, key,
-        { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
+        { role: "user", content: message.text ?? `[${message.type}]`, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
         { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
       if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
         throw new Error("conversation lock lost before terminal acknowledgement");
@@ -315,11 +305,21 @@ export async function handleConversationJob(
       await runTrace.record(runId, "manager_takeover", {});
       return outcome("skipped", runId);
     }
+    stage = "batch.resolve";
+    batchText = await resolveBatchText(
+      services.config.ownerDialogueMode === "cooperation_only"
+        ? batch.filter(message => message.type === "text" || message.type === "audio") : batch, services);
+    if (!batchText) {
+      log.warn("batch.no_text");
+      await services.store.ackBatch(key, activeBatch.batchKey);
+      return outcome("empty", runId);
+    }
+    if (services.config.logMessageContent) log.debug({ batchText }, "batch.content");
     let checkpoint = activeBatch.agentCheckpoint;
     const executed: string[] = [];
     if (services.config.ownerDialogueMode === "cooperation_only") {
       stage = "cooperation.status";
-      if (checkpoint?.mode === "cooperation_only" && checkpoint.plannerVersion !== "semantic_v2") {
+      if (checkpoint?.mode === "cooperation_only" && checkpoint.plannerVersion !== COOPERATION_PLANNER_VERSION) {
         if (activeBatch.outbound) {
           await services.store.handoffToManager(key, activeBatch.batchKey, "legacy_cooperation_plan", lock.token);
           return outcome("skipped", runId, { stopConversation: true });
@@ -330,10 +330,10 @@ export async function handleConversationJob(
       }
       if (!checkpoint) {
         stage = "cooperation.llm";
-        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name,
+        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name, crmBaseUrl: services.config.crmBaseUrl,
           onRaw: raw => runTrace.record(runId, "cooperation.model", { raw }) });
         checkpoint = {
-          mode: "cooperation_only", plannerVersion: "semantic_v2", manualHandoffReason: result.handoffReason,
+          mode: "cooperation_only", plannerVersion: COOPERATION_PLANNER_VERSION, manualHandoffReason: result.handoffReason,
           completedActions: 0, reply: result.reply, finalized: true, result,
         };
         log.info({ actions: result.actions.length, selectedListingId: result.selectedListingId, replyPlanned: !!result.reply }, "cooperation.model.completed");
@@ -354,7 +354,12 @@ export async function handleConversationJob(
           await services.store.ackBatch(key, activeBatch.batchKey);
           return outcome("skipped", runId);
         }
-        await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
+        const write = await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
+        if (write?.applied === false) {
+          log.info({ status: write.status }, "cooperation.status.not_applied");
+          await services.store.ackBatch(key, activeBatch.batchKey);
+          return outcome("skipped", runId);
+        }
         checkpoint.completedActions = 1;
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
@@ -453,6 +458,9 @@ export async function handleConversationJob(
       if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
         throw new Error("conversation lock lost before manual handoff");
       await services.store.handoffToManager(key, activeBatch.batchKey, checkpoint.manualHandoffReason, lock.token);
+      await services.crm.reportReview?.(phone, {issueId: activeBatch.batchKey, reason: checkpoint.manualHandoffReason,
+        state: "review_required", instanceId, listingId: checkpoint.result.selectedListingId, messageId: batch.at(-1)?.idMessage})
+        .catch(error => log.warn({err: (error as Error).message}, "review.notification.failed"));
       await runTrace.record(runId, "manual_handoff", { reason: checkpoint.manualHandoffReason });
       log.info({ reason: checkpoint.manualHandoffReason }, "conversation.manual_handoff");
       return outcome("processed", runId, { reply: "", executedActions: [], stopConversation: true });
@@ -567,6 +575,15 @@ export async function handleConversationJob(
     if (error instanceof AgentOutputError || (error as Error).message.startsWith("actions rejected after bounded repair")) {
       const reason = `model failure at ${stage}: ${(error as Error).message}; manager review required`;
       await services.store.quarantineBatch(key, reason, activeBatch?.batchKey);
+      await services.store.markManualReview(key, reason).catch(() => undefined);
+      await services.crm.reportReview?.(chatId.split("@")[0], {
+        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        reason,
+        state: "review_required",
+        instanceId,
+        messageId: activeBatch?.messages[0]?.idMessage,
+        errorPreview: (error as Error).message.slice(0, 200),
+      }).catch((reviewError) => log.warn({ err: (reviewError as Error).message }, "review.report.failed"));
       quarantined = true;
       return outcome("quarantined", runId, { failureReason: reason });
     }
@@ -577,7 +594,12 @@ export async function handleConversationJob(
     // its batch fence still matches the batch this worker claimed.
     const ownsActiveBatch = Boolean(activeBatch && currentActive?.batchKey === activeBatch.batchKey);
     const currentOutbound = ownsActiveBatch ? currentActive?.outbound ?? outboundIntent : outboundIntent;
-    if (currentOutbound && (sendAttempted || currentOutbound.state === "sent")) {
+    if (currentOutbound?.state === "sent") {
+      // The provider send is confirmed. Let BullMQ retry the history/ack
+      // finalizer; the next run takes the sent-intent path and never sends again.
+      throw error;
+    }
+    if (currentOutbound && (sendAttempted || currentOutbound.state === "sending")) {
       const reason = `outbound processing failed at ${stage}: ${(error as Error).message}; manual reconciliation required before resuming`;
       if (currentOutbound.state === "sending") {
         await services.store
@@ -585,6 +607,15 @@ export async function handleConversationJob(
           .catch(() => undefined);
       }
       await services.store.quarantineBatch(key, reason, activeBatch?.batchKey).catch(() => undefined);
+      await services.store.markManualReview(key, reason).catch(() => undefined);
+      await services.crm.reportReview?.(chatId.split("@")[0], {
+        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        reason,
+        state: "review_required",
+        instanceId,
+        messageId: activeBatch?.messages[0]?.idMessage,
+        errorPreview: (error as Error).message.slice(0, 200),
+      }).catch((reviewError) => log.warn({ err: (reviewError as Error).message }, "review.report.failed"));
       quarantined = true;
       failed = true;
       log.error({ reason, intentId: currentOutbound.intentId }, "conversation.quarantined");
@@ -601,9 +632,45 @@ export async function handleConversationJob(
       return outcome("rescheduled", runId, { failureReason: `${stage}: ${(error as Error).message}` });
     }
 
+    const retryable = Boolean(error && typeof error === "object" &&
+      (error as { retryable?: unknown }).retryable === true);
+    if (isFinalAttempt && retryable && activeBatch && !sendAttempted &&
+        (!currentOutbound || currentOutbound.state === "prepared")) {
+      const retryNotBefore = Date.now() + 60_000;
+      const failureCount = await services.store.deferRecovery(key, activeBatch.batchKey, retryNotBefore, lock.token);
+      if (failureCount >= 5) {
+        const reason = `temporary service failure persisted across ${failureCount} recovery cycles at ${stage}; manager review required`;
+        await services.store.quarantineBatch(key, reason, activeBatch.batchKey).catch(() => undefined);
+        await services.store.markManualReview(key, reason).catch(() => undefined);
+        await services.crm.reportReview?.(chatId.split("@")[0], {
+          issueId: activeBatch.batchKey,
+          reason,
+          state: "review_required",
+          instanceId,
+          messageId: activeBatch.messages[0]?.idMessage,
+          errorPreview: (error as Error).message.slice(0, 200),
+        }).catch((reviewError) => log.warn({ err: (reviewError as Error).message }, "review.report.failed"));
+        quarantined = true;
+      } else {
+        log.warn({ failureCount, retryNotBefore }, "run.recovery.deferred");
+      }
+      throw error;
+    }
+
     if (isFinalAttempt) {
       log.error({ stage, retryCount }, "run.failed.permanent");
-      return outcome("failed", runId, { failureReason: `${stage}: ${(error as Error).message}` });
+      const reason = `${stage}: ${(error as Error).message}; manager review required`;
+      await services.store.quarantineBatch(key, reason, activeBatch?.batchKey).catch(() => undefined);
+      await services.store.markManualReview(key, reason).catch(() => undefined);
+      await services.crm.reportReview?.(chatId.split("@")[0], {
+        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        reason,
+        state: "review_required",
+        instanceId,
+        messageId: activeBatch?.messages[0]?.idMessage,
+      }).catch((reviewError) => log.warn({ err: (reviewError as Error).message }, "review.report.failed"));
+      quarantined = true;
+      throw error;
     }
 
     throw error;
@@ -615,9 +682,27 @@ export async function handleConversationJob(
       try {
         const remaining = await services.store.pendingCount(key);
         if (remaining > 0) {
-          const nextToken = randomUUID();
-          await services.store.setDebounce(key, nextToken, debounceTtlMs(services.config.messageDebounceMs));
-          await services.scheduler.schedule(key, nextToken, services.config.messageDebounceMs, input.retryCount ?? 0);
+          const pendingMessages = await services.store.getPendingMessages(key);
+          const newestSafeReplayTime = Math.min(...pendingMessages.map((message) => {
+            const ts = Number(message.timestamp);
+            return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+          }));
+          if (!Number.isFinite(newestSafeReplayTime) || Date.now() - newestSafeReplayTime > 24 * 60 * 60 * 1000) {
+            const reason = "queued owner message is older than 24 hours or has no reliable timestamp; manager review required";
+            await services.store.markManualReview(key, reason);
+            await services.crm.reportReview?.(chatId.split("@")[0], {
+              issueId: `recovery:${key}`,
+              reason,
+              state: "review_required",
+              instanceId,
+              messageId: pendingMessages[0]?.idMessage,
+            }).catch((reviewError) => log.warn({ err: (reviewError as Error).message }, "review.report.failed"));
+            log.warn({ pending: pendingMessages.length }, "pending.recovery.manual_review");
+          } else {
+            const nextToken = randomUUID();
+            await services.store.setDebounce(key, nextToken, debounceTtlMs(services.config.messageDebounceMs));
+            await services.scheduler.schedule(key, nextToken, services.config.messageDebounceMs, input.retryCount ?? 0);
+          }
         }
       } catch (error) {
         log.warn({ err: (error as Error).message }, "reschedule.after_run.failed");

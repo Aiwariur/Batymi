@@ -19,6 +19,7 @@ import { createRedisConnection, createStoreConnection } from "./queue/connection
 import { buildApp, RuntimeState } from "./app";
 import { Services } from "./services";
 import { CrmInstanceRegistry } from "./crm/instance-registry";
+import { recoverOrphanConversations } from "./queue/conversation-recovery";
 
 async function waitForRedis(redis: IORedis, logger: Logger, attempts = 30): Promise<void> {
   for (let i = 1; i <= attempts; i += 1) {
@@ -121,6 +122,27 @@ async function main(): Promise<void> {
     logger.info({ concurrency: config.workerConcurrency }, "BullMQ worker started");
   }
 
+  let recoveryTimer: NodeJS.Timeout | undefined;
+  if (config.workerEnabled) {
+    let recoveryRunning = false;
+    const runRecoveryPass = async (): Promise<void> => {
+      if (recoveryRunning) return;
+      recoveryRunning = true;
+      try {
+        runtime.recovery = { ...await recoverOrphanConversations(services), checkedAt: new Date().toISOString() };
+        const retried = await webhookProxy.recoverFailed?.();
+        if (retried) logger.warn({ retried }, "webhook.forward.recovery.scheduled");
+      } catch (error) {
+        logger.error({ err: (error as Error).message }, "queue.recovery.pass.failed");
+      } finally {
+        recoveryRunning = false;
+      }
+    };
+    void runRecoveryPass();
+    recoveryTimer = setInterval(() => void runRecoveryPass(), 60_000);
+    recoveryTimer.unref();
+  }
+
   let app: ReturnType<typeof buildApp> | undefined;
   if (config.apiEnabled) {
     app = buildApp(services, runtime);
@@ -136,6 +158,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info({ signal }, "Application shutting down");
     if (registryTimer) clearInterval(registryTimer);
+    if (recoveryTimer) clearInterval(recoveryTimer);
     try {
       if (app) await app.close();
       if (worker) await worker.close();

@@ -39,14 +39,18 @@ export class BullConversationScheduler implements ConversationScheduler {
     delayMs: number,
     retryCount = 0,
   ): Promise<void> {
-    await this.queue.add(
+    const jobId = jobIdFor(conversationKey, token);
+    const job = await this.queue.add(
       "process",
       { conversationKey, token, retryCount },
       {
         delay: Math.max(0, Math.round(delayMs)),
-        jobId: jobIdFor(conversationKey, token),
+        jobId,
       },
     );
+    if (!job || String(job.id) !== jobId) {
+      throw new Error(`conversation job ${jobId} was not durably accepted by BullMQ`);
+    }
   }
 
   async close(): Promise<void> {

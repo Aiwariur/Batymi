@@ -27,7 +27,17 @@ describe("normalizeGreenApiWebhook", () => {
       type: "text",
       text: "Да, продаётся",
       rawType: "textMessage",
+      timestamp: 1700000000000,
     });
+  });
+
+  it("keeps timestamps already expressed in milliseconds unchanged", () => {
+    const payload = {
+      ...basePayload,
+      timestamp: 1700000000123,
+      messageData: { typeMessage: "textMessage", textMessageData: { textMessage: "Да" } },
+    } as GreenApiWebhookPayload;
+    expect(normalizeGreenApiWebhook("7107577616", payload)?.timestamp).toBe(1700000000123);
   });
 
   it("normalizes GreenAPI quotedMessage text from the owner's reply", () => {

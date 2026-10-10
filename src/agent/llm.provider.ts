@@ -17,8 +17,13 @@ export class LlmError extends Error {
   }
 }
 
+export interface CompletionOptions {
+  maxTokens?: number;
+  temperature?: number;
+}
+
 export interface LlmProvider {
-  complete(messages: ChatMessage[]): Promise<string>;
+  complete(messages: ChatMessage[], options?: CompletionOptions): Promise<string>;
 }
 
 const REQUEST_TIMEOUT_MS = 60000;
@@ -29,7 +34,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     private readonly logger: Logger,
   ) {}
 
-  async complete(messages: ChatMessage[]): Promise<string> {
+  async complete(messages: ChatMessage[], options: CompletionOptions = {}): Promise<string> {
     if (!this.config.llmApiKey) throw new LlmError("LLM_API_KEY is not configured", false);
 
     const controller = new AbortController();
@@ -44,8 +49,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         body: JSON.stringify({
           model: this.config.llmModel,
           messages,
-          max_tokens: this.config.llmMaxTokens,
-          temperature: this.config.llmTemperature,
+          max_tokens: Math.min(this.config.llmMaxTokens, options.maxTokens ?? this.config.llmMaxTokens),
+          temperature: options.temperature ?? this.config.llmTemperature,
           frequency_penalty: this.config.llmFrequencyPenalty,
           top_p: this.config.llmTopP,
           response_format: { type: "json_object" },
@@ -55,7 +60,14 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
       if (!response.ok) {
         const body = await response.text().catch(() => "");
-        const retryable = response.status === 429 || response.status >= 500;
+        let reservedCredits = false;
+        if (response.status === 402) {
+          try {
+            const detail = JSON.parse(body) as {error?: {message?: string}};
+            reservedCredits = typeof detail.error?.message === "string" && detail.error.message.includes("in-flight requests");
+          } catch { /* Ordinary payment failures remain operator-visible. */ }
+        }
+        const retryable = reservedCredits || response.status === 429 || response.status >= 500;
         throw new LlmError(`LLM request failed: HTTP ${response.status}`, retryable, response.status);
       }
 

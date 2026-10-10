@@ -1,10 +1,12 @@
 import Fastify, { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { Services } from "./services";
 import { registerGreenApiRoutes } from "./webhooks/greenapi.routes";
+import { RecoverySummary } from "./queue/conversation-recovery";
 
 export interface RuntimeState {
   redisConnected: boolean;
   workerStarted: boolean;
+  recovery?: RecoverySummary & { checkedAt: string };
 }
 
 export function buildApp(services: Services, runtime: RuntimeState): FastifyInstance {
@@ -42,6 +44,7 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
       worker,
       instances: config.instances.length,
       ownerDialogueMode: config.ownerDialogueMode,
+      ...(runtime.recovery ? { recovery: runtime.recovery } : {}),
       ...(missing.length ? { missing } : {}),
     };
   });

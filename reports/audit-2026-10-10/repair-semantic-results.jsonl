@@ -1,0 +1,33 @@
+{"probe":"synthetic-only","model":"anthropic/claude-sonnet-4.5","cases":31}
+{"name":"consent_en","expected":"agreed","actual":"agreed","match":true,"calls":1,"durationMs":2464,"result":{"actions":[{"type":"set_crm_status","listingId":102,"status":"agreed"}],"stopConversation":true,"selectedListingId":102,"reply":""},"raw":["```json\n{\n  \"intent\": \"consent\",\n  \"language\": \"en\",\n  \"evidence\": \"happy to work with your agency\",\n  \"selectedListingId\": \"102\"\n}\n```"]}
+{"name":"consent_ru","expected":"agreed","actual":"agreed","match":true,"calls":1,"durationMs":2636,"result":{"actions":[{"type":"set_crm_status","listingId":102,"status":"agreed"}],"stopConversation":true,"selectedListingId":102,"reply":""},"raw":["```json\n{\n  \"intent\": \"consent\",\n  \"language\": \"ru\",\n  \"evidence\": \"Да, готов сотрудничать\",\n  \"selectedListingId\": \"102\"\n}\n```"]}
+{"name":"consent_translit","expected":"agreed","actual":"agreed","match":true,"calls":1,"durationMs":2476,"result":{"actions":[{"type":"set_crm_status","listingId":102,"status":"agreed"}],"stopConversation":true,"selectedListingId":102,"reply":""},"raw":["```json\n{\n  \"intent\": \"consent\",\n  \"language\": \"ru_latn\",\n  \"evidence\": \"Da, gotov sotrudnichat\",\n  \"selectedListingId\": \"102\"\n}\n```"]}
+{"name":"consent_ka","expected":"agreed","actual":"agreed","match":true,"calls":1,"durationMs":2686,"result":{"actions":[{"type":"set_crm_status","listingId":102,"status":"agreed"}],"stopConversation":true,"selectedListingId":102,"reply":""},"raw":["```json\n{\n  \"intent\": \"consent\",\n  \"language\": \"ka\",\n  \"evidence\": \"დიახ, მზად ვარ სააგენტოსთან თანამშრომლობისთვის\",\n  \"selectedListingId\": \"102\"\n}\n```"]}
+{"name":"initial_bare_yes","expected":"reply","actual":"reply","match":true,"calls":0,"durationMs":0,"result":{"actions":[],"stopConversation":false,"reply":"Готовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?","selectedListingId":102},"raw":[]}
+{"name":"availability_only","expected":"reply","actual":"reply","match":true,"calls":1,"durationMs":2011,"result":{"actions":[],"stopConversation":false,"selectedListingId":102,"reply":"Готовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?"},"raw":["```json\n{\n  \"intent\": \"ask_cooperation\",\n  \"language\": \"ru\"\n}\n```"]}
+{"name":"refusal","expected":"disagreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"availability_both","expected":"reply","actual":"reply","match":true,"calls":1,"durationMs":2437,"result":{"actions":[],"stopConversation":false,"selectedListingId":102,"reply":"Готовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?"},"raw":["```json\n{\n  \"intent\": \"ask_cooperation\",\n  \"language\": \"ru\"\n}\n```"]}
+{"name":"rented","expected":"listing_removed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"refusal_en","expected":"disagreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"unclear_resolved","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"which_property","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"identity","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"send_link","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"explain_service_en","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"explain_service","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"human","expected":"identity","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"ai","expected":"identity","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"conditional_commission","expected":"terms","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"commission","expected":"terms","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"lease_ka","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"lease_en","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"consent_lease","expected":"agreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"lease_contract","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"price","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"realtor","expected":"realtor","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"missing_url","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"internal_url","expected":"reply","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"consent_after_link","expected":"agreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"yes_after_single_question","expected":"agreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"name":"no_after_single_question","expected":"disagreed","actual":"error","match":false,"error":"LLM request failed: HTTP 402","calls":1,"raw":[]}
+{"total":31,"failures":24}

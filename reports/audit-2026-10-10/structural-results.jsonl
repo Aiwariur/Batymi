@@ -1,0 +1,8 @@
+{"name":"manual_phone_not_detected","observed":{"managerTakeover":false}}
+{"name":"audio_transcript_discarded","observed":{"contents":["🎵 Аудио"]}}
+{"name":"seconds_vs_milliseconds","observed":{"order":[{"role":"user","ts":1791619260},{"role":"assistant","ts":1791619200000}]}}
+{"name":"address_only_not_grounded","observed":{"reply":"Пишу по адресу: Выдуманная улица, 99. Готовы сотрудничать?"}}
+{"name":"internal_url_not_excluded","observed":{"reply":"https://admin.batumi-key.homes/flat/102"}}
+{"name":"retry_exhaustion_strands_batch","observed":{"outcomes":["rescheduled","rescheduled","skipped","failed"],"active":true,"pending":1,"scheduled":0}}
+{"name":"expired_token_strands_batch","observed":{"status":"skipped","active":true,"pending":1,"scheduled":0}}
+{"name":"crm_applied_false_treated_as_success","observed":{"setStatusReturnedWithoutError":true}}

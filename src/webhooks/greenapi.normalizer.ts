@@ -60,7 +60,8 @@ export function normalizeGreenApiWebhook(
     chatId,
     senderPhone: phoneFromChatId(chatId),
     type,
-    timestamp: payload.timestamp ?? Date.now(),
+    // GreenAPI sends epoch seconds; the rest of Batymi stores epoch milliseconds.
+    timestamp: normalizeTimestamp(payload.timestamp),
     rawType,
   };
 
@@ -76,4 +77,9 @@ export function normalizeGreenApiWebhook(
   }
 
   return normalized;
+}
+
+function normalizeTimestamp(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return Date.now();
+  return value < 1_000_000_000_000 ? value * 1000 : value;
 }

@@ -21,7 +21,7 @@ export interface OutboundIntent {
 /** Durable progress for the currently claimed inbound batch. */
 export interface AgentCheckpoint {
   mode?: "cooperation_only";
-  plannerVersion?: "semantic_v1" | "semantic_v2";
+  plannerVersion?: "semantic_v1" | "semantic_v2" | "semantic_v3";
   manualHandoffReason?: "identity" | "terms";
   result: AgentResult;
   /** Number of accepted CRM actions that completed successfully, in order. */
@@ -48,6 +48,9 @@ export function validateAgentCheckpoint(checkpoint: AgentCheckpoint): void {
 export interface ActiveBatch {
   batchKey: string;
   messages: NormalizedMessage[];
+  createdAt?: number;
+  retryNotBefore?: number;
+  recoveryFailureCount?: number;
   quarantineReason?: string;
   outbound?: OutboundIntent;
   agentCheckpoint?: AgentCheckpoint;
@@ -145,6 +148,16 @@ export interface ConversationStore {
   ): Promise<void>;
 
   pendingCount(conversationKey: string): Promise<number>;
+  getPendingMessages(conversationKey: string): Promise<NormalizedMessage[]>;
+
+  /** Conversation keys with durable pending or active work. */
+  listConversations(limit?: number): Promise<string[]>;
+  /** Whether a live worker currently owns the conversation lock. */
+  hasLock(conversationKey: string): Promise<boolean>;
+  /** Pause automatic replies and surface queued history for manager review. */
+  markManualReview(conversationKey: string, reason: string): Promise<void>;
+  /** Persist bounded safe-retry backoff while fencing the active batch. */
+  deferRecovery(conversationKey: string, batchKey: string, retryNotBefore: number, lockToken: string): Promise<number>;
 
   setDebounce(conversationKey: string, token: string, ttlMs: number): Promise<void>;
   getDebounce(conversationKey: string): Promise<string | null>;

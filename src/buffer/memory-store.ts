@@ -29,6 +29,7 @@ export class MemoryConversationStore implements ConversationStore {
   private history = new Map<string, HistoryEntry[]>();
   private active = new Map<string, ActiveBatch>();
   private manualHandoffs = new Map<string, string>();
+  private conversationListOffset = 0;
 
   async acceptInbound(input: {
     instanceId: string;
@@ -84,6 +85,7 @@ export class MemoryConversationStore implements ConversationStore {
     this.active.set(conversationKey, {
       batchKey: batchKeyForMessages(list),
       messages: list.slice(),
+      createdAt: Date.now(),
     });
     return list.slice();
   }
@@ -195,6 +197,43 @@ export class MemoryConversationStore implements ConversationStore {
 
   async pendingCount(conversationKey: string): Promise<number> {
     return (this.pending.get(conversationKey) ?? []).length;
+  }
+
+  async getPendingMessages(conversationKey: string): Promise<NormalizedMessage[]> {
+    return (this.pending.get(conversationKey) ?? []).slice();
+  }
+
+  async listConversations(limit = 100): Promise<string[]> {
+    const keys = [...new Set([...this.pending.keys(), ...this.active.keys()])];
+    if (!keys.length) return [];
+    const start = this.conversationListOffset % keys.length;
+    this.conversationListOffset = (start + Math.max(1, limit)) % keys.length;
+    return Array.from({ length: Math.min(limit, keys.length) }, (_, index) => keys[(start + index) % keys.length]);
+  }
+
+  async hasLock(conversationKey: string): Promise<boolean> {
+    const lock = this.locks.get(conversationKey);
+    if (!lock) return false;
+    if (lock.expiresAt <= Date.now()) {
+      this.locks.delete(conversationKey);
+      return false;
+    }
+    return true;
+  }
+
+  async markManualReview(conversationKey: string, reason: string): Promise<void> {
+    this.manualHandoffs.set(conversationKey, reason.slice(0, 500));
+  }
+
+  async deferRecovery(conversationKey: string, batchKey: string, retryNotBefore: number, lockToken: string): Promise<number> {
+    const active = this.active.get(conversationKey);
+    const lock = this.locks.get(conversationKey);
+    if (!active || active.batchKey !== batchKey || !lock || lock.value !== lockToken || lock.expiresAt <= Date.now()) {
+      throw new Error("active batch or conversation lock changed before retry backoff");
+    }
+    active.retryNotBefore = retryNotBefore;
+    active.recoveryFailureCount = (active.recoveryFailureCount ?? 0) + 1;
+    return active.recoveryFailureCount;
   }
 
   async setDebounce(conversationKey: string, token: string, ttlMs: number): Promise<void> {

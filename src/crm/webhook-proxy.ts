@@ -11,6 +11,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 export interface WebhookProxyJobData {
   instanceId: string;
   payload: unknown;
+  recoveryAttempts?: number;
 }
 
 /**
@@ -49,11 +50,13 @@ export function webhookForwardJobId(instanceId: string, payload: unknown): strin
 export interface WebhookProxy {
   /** Resolves only once the forwarding job has been durably accepted by BullMQ. */
   forward(instanceId: string, payload: unknown): Promise<void>;
+  recoverFailed?(): Promise<number>;
   close(): Promise<void>;
 }
 
 export class BullWebhookProxy implements WebhookProxy {
   private readonly queue: Queue<WebhookProxyJobData>;
+  private failedRecoveryOffset = 0;
 
   constructor(connection: IORedis, idempotencyTtlSeconds = 86400) {
     this.queue = new Queue<WebhookProxyJobData>(WEBHOOK_FORWARD_QUEUE, {
@@ -71,11 +74,36 @@ export class BullWebhookProxy implements WebhookProxy {
   }
 
   async forward(instanceId: string, payload: unknown): Promise<void> {
-    await this.queue.add(
+    const jobId = webhookForwardJobId(instanceId, payload);
+    const job = await this.queue.add(
       "forward",
       { instanceId, payload },
-      { jobId: webhookForwardJobId(instanceId, payload) },
+      { jobId },
     );
+    // BullMQ deduplicates by job id, including jobs retained in failed state.
+    // Provider redelivery is an explicit signal to retry this idempotent CRM
+    // write; completed jobs remain deduplicated for the ingress TTL.
+    if ((await job.getState()) === "failed") await job.retry("failed");
+  }
+
+  async recoverFailed(): Promise<number> {
+    const failedCount = (await this.queue.getJobCounts("failed")).failed ?? 0;
+    if (failedCount === 0) {
+      this.failedRecoveryOffset = 0;
+      return 0;
+    }
+    const start = this.failedRecoveryOffset % failedCount;
+    const jobs = await this.queue.getJobs(["failed"], start, start + 99, true);
+    this.failedRecoveryOffset = (start + jobs.length) % failedCount;
+    let retried = 0;
+    for (const job of jobs) {
+      const attempts = job.data.recoveryAttempts ?? 0;
+      if (attempts >= 3) continue;
+      await job.updateData({ ...job.data, recoveryAttempts: attempts + 1 });
+      await job.retry("failed");
+      retried += 1;
+    }
+    return retried;
   }
 
   async close(): Promise<void> {
