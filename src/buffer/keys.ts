@@ -39,6 +39,10 @@ export function historyKey(key: string): string {
   return `conversation:${key}:history`;
 }
 
+export function manualHandoffKey(key: string): string {
+  return `conversation:${key}:manual-handoff`;
+}
+
 /**
  * The debounce token must stay alive at least until the delayed job that reads
  * it fires, otherwise the job would consider itself stale and the message would

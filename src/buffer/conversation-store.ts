@@ -21,7 +21,8 @@ export interface OutboundIntent {
 /** Durable progress for the currently claimed inbound batch. */
 export interface AgentCheckpoint {
   mode?: "cooperation_only";
-  plannerVersion?: "semantic_v1";
+  plannerVersion?: "semantic_v1" | "semantic_v2";
+  manualHandoffReason?: "identity" | "terms";
   result: AgentResult;
   /** Number of accepted CRM actions that completed successfully, in order. */
   completedActions: number;
@@ -110,6 +111,11 @@ export interface ConversationStore {
 
   /** Ack the in-flight batch after all CRM/history work is complete. */
   ackBatch(conversationKey: string, batchKey?: string): Promise<void>;
+
+  /** Persistent silence for a conversation requiring a human answer. No TTL. */
+  getManualHandoff(conversationKey: string): Promise<string | null>;
+  /** Atomically pause and acknowledge only the current locked batch. */
+  handoffToManager(conversationKey: string, batchKey: string, reason: string, lockToken: string): Promise<void>;
 
   /** Stop automatic processing while an outbound result needs reconciliation. */
   quarantineBatch(conversationKey: string, reason: string, batchKey?: string): Promise<void>;

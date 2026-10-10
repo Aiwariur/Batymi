@@ -16,6 +16,7 @@ import {
   historyKey,
   ingressScheduledKey,
   lockKey,
+  manualHandoffKey,
   pendingKey,
   seenKey,
 } from "./keys";
@@ -130,6 +131,16 @@ local active = cjson.decode(raw)
 if ARGV[2] ~= '' and active.batchKey ~= ARGV[2] then return 0 end
 active.quarantineReason = string.sub(ARGV[1], 1, 500)
 redis.call('SET', KEYS[1], cjson.encode(active))
+return 1
+`;
+
+const MANUAL_HANDOFF_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw or redis.call('GET', KEYS[3]) ~= ARGV[3] then return 0 end
+local active = cjson.decode(raw)
+if active.batchKey ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[4], string.sub(ARGV[2], 1, 500))
+redis.call('DEL', KEYS[1], KEYS[2])
 return 1
 `;
 
@@ -250,6 +261,17 @@ export class RedisConversationStore implements ConversationStore {
       reason,
       batchKey ?? "",
     );
+  }
+
+  async getManualHandoff(conversationKey: string): Promise<string | null> {
+    return this.redis.get(manualHandoffKey(conversationKey));
+  }
+
+  async handoffToManager(conversationKey: string, batchKey: string, reason: string, lockToken: string): Promise<void> {
+    const result = await this.redis.eval(MANUAL_HANDOFF_SCRIPT, 4,
+      activeBatchKey(conversationKey), activeBatchMessagesKey(conversationKey), lockKey(conversationKey),
+      manualHandoffKey(conversationKey), batchKey, reason, lockToken);
+    if (Number(result) !== 1) throw new Error("active batch or conversation lock changed before manual handoff");
   }
 
   async prepareOutboundIntent(input: {

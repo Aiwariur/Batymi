@@ -207,6 +207,17 @@ export async function handleConversationJob(
       log.error({ reason }, "conversation.quarantined");
       return outcome("quarantined", runId, { failureReason: reason });
     }
+    const manualHandoff = await services.store.getManualHandoff(key);
+    if (manualHandoff) {
+      for (const message of batch) await appendHistory(services.store, key,
+        { role: "user", content: message.text ?? `[${message.type}]`, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
+        { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
+      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+        throw new Error("conversation lock lost before manual handoff acknowledgement");
+      await services.store.ackBatch(key, activeBatch.batchKey);
+      await runTrace.record(runId, "manual_handoff.silent", { reason: manualHandoff });
+      return outcome("skipped", runId, { stopConversation: true });
+    }
     log.info({ messages: batch.length }, "buffer.drained");
 
     // Switching to handoff mode cancels already planned qualification replies.
@@ -308,14 +319,22 @@ export async function handleConversationJob(
     const executed: string[] = [];
     if (services.config.ownerDialogueMode === "cooperation_only") {
       stage = "cooperation.status";
-      if (checkpoint?.mode === "cooperation_only" && !checkpoint.plannerVersion &&
-          !checkpoint.reply && checkpoint.result.actions.length === 0 && !activeBatch.outbound) checkpoint = undefined;
+      if (checkpoint?.mode === "cooperation_only" && checkpoint.plannerVersion !== "semantic_v2") {
+        if (activeBatch.outbound) {
+          await services.store.handoffToManager(key, activeBatch.batchKey, "legacy_cooperation_plan", lock.token);
+          return outcome("skipped", runId, { stopConversation: true });
+        }
+        // An older unsent model decision must be planned under the new rules.
+        // Keep already committed actions for idempotent recovery.
+        if (checkpoint.completedActions === 0) checkpoint = undefined;
+      }
       if (!checkpoint) {
         stage = "cooperation.llm";
-        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId,
+        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name,
           onRaw: raw => runTrace.record(runId, "cooperation.model", { raw }) });
         checkpoint = {
-          mode: "cooperation_only", plannerVersion: "semantic_v1", completedActions: 0, reply: result.reply, finalized: true, result,
+          mode: "cooperation_only", plannerVersion: "semantic_v2", manualHandoffReason: result.handoffReason,
+          completedActions: 0, reply: result.reply, finalized: true, result,
         };
         log.info({ actions: result.actions.length, selectedListingId: result.selectedListingId, replyPlanned: !!result.reply }, "cooperation.model.completed");
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
@@ -429,6 +448,15 @@ export async function handleConversationJob(
     for (const message of batch) await appendHistory(services.store, key,
       { role: "user", content: message.text ?? batchText, ts: message.timestamp, messageId: message.idMessage, sender: "owner" },
       { maxMessages: services.config.conversationHistoryMaxMessages, ttlSeconds: services.config.conversationHistoryTtlSeconds });
+
+    if (checkpoint.manualHandoffReason) {
+      if (lockLost || !(await services.store.refreshLock(key, lock.token, services.config.conversationLockTtlMs)))
+        throw new Error("conversation lock lost before manual handoff");
+      await services.store.handoffToManager(key, activeBatch.batchKey, checkpoint.manualHandoffReason, lock.token);
+      await runTrace.record(runId, "manual_handoff", { reason: checkpoint.manualHandoffReason });
+      log.info({ reason: checkpoint.manualHandoffReason }, "conversation.manual_handoff");
+      return outcome("processed", runId, { reply: "", executedActions: [], stopConversation: true });
+    }
 
     stage = "crm.reply";
     const reply = checkpoint.reply;

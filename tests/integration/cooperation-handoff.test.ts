@@ -19,6 +19,52 @@ const proposal = (reply = "", status?: "agreed" | "disagreed" | "listing_removed
   actions: status ? [{ type: "set_crm_status", listingId: 102, status }] : [] });
 
 describe("LLM cooperation handoff execution", () => {
+  it.each([
+    ["identity", "Are you ai?", "Yes, I'm an AI assistant. A manager will contact you. Ready to cooperate?"],
+    ["terms", "So contract will be around 6 months possibly extending", "Условия сотрудничества обсудит менеджер."],
+  ])("silences %s handoff and future messages without changing CRM status", async (reason, text, leakedReply) => {
+    const { h, instanceId, phone, message } = setup();
+    const key = h.key(instanceId, phone.slice(1) + "@c.us");
+    h.llm.responder = () => JSON.stringify({ reply: leakedReply, actions: [], stopConversation: false, handoffReason: reason });
+    await h.ingest(message(text));
+    const first = (await h.scheduler.runAll())[0];
+    expect(first).toMatchObject({ status: "processed", reply: "", stopConversation: true });
+    expect(await h.store.getManualHandoff(key)).toBe(reason);
+    expect(await h.store.getActiveBatch(key)).toBeNull();
+    await h.ingest(message("Какая квартира?"));
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "skipped", stopConversation: true });
+    expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+    expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "new")).toBe(true);
+    expect((await h.store.getHistory(key, 20)).map(row => row.content)).toContain("Какая квартира?");
+    expect(await h.store.pendingCount(key)).toBe(0);
+  });
+  it("uses the receiving line's representative name for a normal introduction", async () => {
+    const { h, instanceId, message } = setup();
+    h.config.instances[0].name = "Александр";
+    h.llm.responder = messages => {
+      expect(messages[0].content).toContain('"representativeName":"Александр"');
+      return proposal("Александр, представляю агентство долгосрочной аренды.");
+    };
+    await h.ingest(message("Кто мне пишет?"));
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual(["Александр, представляю агентство долгосрочной аренды."]);
+  });
+  it("recovers a saved handoff without asking the model again after a storage failure", async () => {
+    const { h, instanceId, phone, message } = setup();
+    const key = h.key(instanceId, phone.slice(1) + "@c.us");
+    h.llm.responder = () => JSON.stringify({ reply: "", actions: [], stopConversation: true, handoffReason: "identity" });
+    const handoff = h.store.handoffToManager.bind(h.store);
+    const failOnce = vi.spyOn(h.store, "handoffToManager").mockRejectedValueOnce(Error("Redis temporarily unavailable"))
+      .mockImplementation(handoff);
+    await h.ingest(message("Are you ai?"));
+    await h.scheduler.runAll();
+    expect(failOnce).toHaveBeenCalledTimes(2);
+    expect(h.llm.calls).toHaveLength(1);
+    expect(await h.store.getManualHandoff(key)).toBe("identity");
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it.each([false, true])("transcribes cooperation audio and preserves accompanying text (mixed=%s)", async mixed => {
     const { h, message } = setup();
     const fileUrl = "https://greenapi.example/owner.ogg";

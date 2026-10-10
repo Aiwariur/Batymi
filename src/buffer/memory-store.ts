@@ -28,6 +28,7 @@ export class MemoryConversationStore implements ConversationStore {
   private locks = new Map<string, ExpiringValue<string>>();
   private history = new Map<string, HistoryEntry[]>();
   private active = new Map<string, ActiveBatch>();
+  private manualHandoffs = new Map<string, string>();
 
   async acceptInbound(input: {
     instanceId: string;
@@ -132,6 +133,19 @@ export class MemoryConversationStore implements ConversationStore {
   async quarantineBatch(conversationKey: string, reason: string, batchKey?: string): Promise<void> {
     const active = this.active.get(conversationKey);
     if (active && (!batchKey || active.batchKey === batchKey)) active.quarantineReason = reason;
+  }
+
+  async getManualHandoff(conversationKey: string): Promise<string | null> {
+    return this.manualHandoffs.get(conversationKey) ?? null;
+  }
+
+  async handoffToManager(conversationKey: string, batchKey: string, reason: string, lockToken: string): Promise<void> {
+    const active = this.active.get(conversationKey);
+    const lock = this.locks.get(conversationKey);
+    if (!active || active.batchKey !== batchKey || !lock || lock.value !== lockToken || lock.expiresAt <= Date.now())
+      throw new Error("active batch or conversation lock changed before manual handoff");
+    this.manualHandoffs.set(conversationKey, reason.slice(0, 500));
+    this.active.delete(conversationKey);
   }
 
   async prepareOutboundIntent(input: {
@@ -243,6 +257,7 @@ export class MemoryConversationStore implements ConversationStore {
     this.scheduled.clear();
     this.pending.clear();
     this.active.clear();
+    this.manualHandoffs.clear();
     this.debounce.clear();
     this.locks.clear();
     this.history.clear();
