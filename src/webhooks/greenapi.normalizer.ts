@@ -4,6 +4,7 @@ import { GreenApiWebhookPayload } from "../greenapi/greenapi.schemas";
 const TYPE_MAP: Record<string, MessageType> = {
   textMessage: "text",
   extendedTextMessage: "text",
+  quotedMessage: "text",
   audioMessage: "audio",
   imageMessage: "image",
   documentMessage: "document",

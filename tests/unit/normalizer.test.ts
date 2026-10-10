@@ -30,6 +30,23 @@ describe("normalizeGreenApiWebhook", () => {
     });
   });
 
+  it("normalizes GreenAPI quotedMessage text from the owner's reply", () => {
+    const payload = {
+      ...basePayload,
+      messageData: {
+        typeMessage: "quotedMessage",
+        extendedTextMessageData: { text: "Да, готов сотрудничать" },
+        quotedMessage: { stanzaId: "original-question", textMessage: "Готовы сотрудничать?" },
+      },
+    } as GreenApiWebhookPayload;
+
+    expect(normalizeGreenApiWebhook("7107577616", payload)).toMatchObject({
+      type: "text",
+      text: "Да, готов сотрудничать",
+      rawType: "quotedMessage",
+    });
+  });
+
   it("normalizes an audio message and keeps the download url", () => {
     const payload = {
       ...basePayload,

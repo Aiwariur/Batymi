@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHarness } from "../helpers/harness";
 import { COOPERATION_QUESTION } from "../../src/conversation/cooperation-agent";
+import { normalizeGreenApiWebhook } from "../../src/webhooks/greenapi.normalizer";
+import { GreenApiWebhookPayload } from "../../src/greenapi/greenapi.schemas";
 
 function setup() {
   const h = createHarness({ OWNER_DIALOGUE_MODE: "cooperation_only" });
@@ -19,6 +21,16 @@ const proposal = (reply = "", status?: "agreed" | "disagreed" | "listing_removed
   actions: status ? [{ type: "set_crm_status", listingId: 102, status }] : [] });
 
 describe("LLM cooperation handoff execution", () => {
+  it("repairs a silent nonterminal model result into an owner clarification", async () => {
+    const { h, message } = setup();
+    const reply = "Пишу по этой квартире: https://example.com/flat/102. Готовы сотрудничать?";
+    h.llm.responder = () => h.llm.calls.length === 1 ? proposal("") : proposal(reply);
+    await h.ingest(message("Какая именно квартира?"));
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "processed", reply });
+    expect(h.llm.calls).toHaveLength(2);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+  });
   it.each([
     ["identity", "Are you ai?", "Yes, I'm an AI assistant. A manager will contact you. Ready to cooperate?"],
     ["terms", "So contract will be around 6 months possibly extending", "Условия сотрудничества обсудит менеджер."],
@@ -94,6 +106,54 @@ describe("LLM cooperation handoff execution", () => {
     expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "agreed")).toBe(true);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
+  it.each([
+    ["agreed", "Да, готов сотрудничать"],
+    ["disagreed", "Нет, сотрудничать не готов"],
+  ] as const)("uses quoted owner reply text for %s and stops after the terminal decision", async (status, answer) => {
+    const { h, instanceId, phone, message } = setup();
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const clarification = "Какой адрес квартиры?";
+    const quoted = normalizeGreenApiWebhook(instanceId, {
+      typeWebhook: "incomingMessageReceived",
+      idMessage: `quoted-${status}`,
+      senderData: { chatId: phone.slice(1) + "@c.us" },
+      messageData: {
+        typeMessage: "quotedMessage",
+        extendedTextMessageData: { text: clarification },
+        quotedMessage: { idMessage: "original-cooperation-question", textMessage: COOPERATION_QUESTION },
+      },
+    } as GreenApiWebhookPayload);
+    expect(quoted).toMatchObject({ type: "text", text: clarification, rawType: "quotedMessage" });
+
+    const reply = "Квартира по адресу Лермонтова 31.";
+    h.llm.responder = messages => {
+      const lastUser = messages.filter(row => row.role === "user").at(-1)?.content;
+      if (lastUser === clarification) {
+        expect(lastUser).not.toContain(COOPERATION_QUESTION);
+        return proposal(reply);
+      }
+      expect(lastUser).toBe(answer);
+      expect(messages.some(row => row.content.includes("original-cooperation-question"))).toBe(false);
+      expect(messages.some(row => row.content.includes(COOPERATION_QUESTION))).toBe(true);
+      return proposal("", status);
+    };
+    await h.ingest(quoted!);
+    await h.scheduler.runAll();
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+
+    await h.ingest(message(answer));
+    await h.scheduler.runAll();
+    expect((await h.crm.getListingsByPhone(phone)).every(row => row.crm_status === status)).toBe(true);
+    expect(setStatus).toHaveBeenCalledTimes(1);
+    expect(setStatus).toHaveBeenCalledWith(102, status, { suppressTelegram: true, cooperationOnly: true });
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+
+    await h.ingest(message("Продолжим разговор?"));
+    expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
+    expect(h.llm.calls).toHaveLength(2);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+    expect(setStatus).toHaveBeenCalledTimes(1);
+  });
   it("sends the model's apartment answer for the actual transliterated message without a dictionary", async () => {
     const { h, message } = setup();
     const reply = "Interesuet kvartira na Lermontova 31: https://example.com/flat/102. Gotovy sotrudnichat?";
@@ -149,12 +209,28 @@ describe("LLM cooperation handoff execution", () => {
     expect(h.llm.calls).toHaveLength(1);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
-  it("leaves an ambiguous decision to the model without forcing a CRM status", async () => {
+  it("hands explicit commission conditions to a manager without forcing a CRM status", async () => {
     const { h, message } = setup();
-    h.llm.responder = () => proposal("");
+    h.llm.responder = () => JSON.stringify({ reply: "", actions: [], stopConversation: true, handoffReason: "terms" });
     await h.ingest(message("Да, но без комиссии"));
-    await h.scheduler.runAll();
+    const result = (await h.scheduler.runAll())[0];
+    expect(result).toMatchObject({ status: "processed", reply: "", stopConversation: true });
     expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+  });
+  it("answers a plain rental-duration statement with the apartment and cooperation question", async () => {
+    const { h, message } = setup();
+    const reply = "Квартира на Лермонтова 31: https://example.com/flat/102. Готовы сотрудничать?";
+    h.llm.responder = messages => {
+      expect(messages.at(-1)?.content).toBe("Сдаю до октября");
+      return proposal(reply);
+    };
+    await h.ingest(message("Сдаю до октября"));
+    const result = (await h.scheduler.runAll())[0];
+    expect(result).toMatchObject({ status: "processed", stopConversation: false });
+    expect(await h.store.getManualHandoff(h.key(h.config.instances[0].id, "995555700090@c.us"))).toBeNull();
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
   it("excludes a model-recognized Georgian realtor across all listings without selecting an apartment", async () => {
