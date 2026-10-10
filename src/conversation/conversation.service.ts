@@ -13,6 +13,7 @@ import { debounceTtlMs } from "../buffer/keys";
 import { ActiveBatch, OutboundIntent } from "../buffer/conversation-store";
 import { assembleCrmHistory } from "./crm-history";
 import { runTrace } from "../observability/run-trace";
+import { recoveryIssueId } from "../observability/agent-review";
 import { planCooperation, COOPERATION_PLANNER_VERSION } from "./cooperation-agent";
 
 const MAX_MANUAL_RETRIES = 2;
@@ -301,7 +302,7 @@ export async function handleConversationJob(
     });
     if (managerTakeover) {
       log.info("conversation.manager_takeover");
-      await services.store.ackBatch(key, activeBatch.batchKey);
+      await services.store.handoffToManager(key, activeBatch.batchKey, "manager_takeover", lock.token);
       await runTrace.record(runId, "manager_takeover", {});
       return outcome("skipped", runId);
     }
@@ -349,9 +350,11 @@ export async function handleConversationJob(
         const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
         const target = filterListingsByManager(latestListings, instance.managerId, services.config.allowedManagerIds)
           .find(listing => String(listing.id) === String(action.listingId));
+        const takenOver = assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover;
         if (!target || isTerminalListing(target, services.config.terminalCrmStatuses) && target.crm_status !== action.status ||
-            assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover) {
-          await services.store.ackBatch(key, activeBatch.batchKey);
+            takenOver) {
+          if (takenOver) await services.store.handoffToManager(key, activeBatch.batchKey, "manager_takeover", lock.token);
+          else await services.store.ackBatch(key, activeBatch.batchKey);
           return outcome("skipped", runId);
         }
         const write = await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
@@ -408,11 +411,13 @@ export async function handleConversationJob(
           action.type === "set_crm_status" && currentTarget.crm_status === action.status ||
           action.type === "set_contact_type" && currentTarget.contact_type === action.contactType
         );
-        if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
+        const takenOver = assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover;
+        if (takenOver ||
             currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !alreadyAppliedTerminalAction ||
             !writableNow.some(listing => String(listing.id) === String(targetId))) {
           log.info("conversation.manager_takeover.before_action");
-          await services.store.ackBatch(key, activeBatch.batchKey);
+          if (takenOver) await services.store.handoffToManager(key, activeBatch.batchKey, "manager_takeover", lock.token);
+          else await services.store.ackBatch(key, activeBatch.batchKey);
           return outcome("skipped", runId);
         }
         const gate = applyGates([action], {
@@ -479,12 +484,14 @@ export async function handleConversationJob(
         action.type === "set_crm_status" && action.status === currentTarget.crm_status ||
         action.type === "set_contact_type" && action.contactType === "realtor" && currentTarget.contact_type === "realtor" ||
         action.type === "update_rental_terms" && action.data.availability_status === "rented" && currentTarget.rental_terms?.availability_status === "rented");
-      if (assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover ||
+      const takenOver = assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover;
+      if (takenOver ||
           currentTarget && isTerminalListing(currentTarget, services.config.terminalCrmStatuses) && !closedByThisBatch ||
           !filterListingsByManager(latestListings, instance.managerId, services.config.allowedManagerIds)
             .some(listing => String(listing.id) === String(targetId))) {
         log.info("conversation.manager_takeover.before_send");
-        await services.store.ackBatch(key, activeBatch.batchKey);
+        if (takenOver) await services.store.handoffToManager(key, activeBatch.batchKey, "manager_takeover", lock.token);
+        else await services.store.ackBatch(key, activeBatch.batchKey);
         return outcome("skipped", runId);
       }
       if (services.config.logMessageContent) log.debug({ reply }, "crm.reply.content");
@@ -577,7 +584,7 @@ export async function handleConversationJob(
       await services.store.quarantineBatch(key, reason, activeBatch?.batchKey);
       await services.store.markManualReview(key, reason).catch(() => undefined);
       await services.crm.reportReview?.(chatId.split("@")[0], {
-        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        issueId: activeBatch?.batchKey ?? recoveryIssueId(key),
         reason,
         state: "review_required",
         instanceId,
@@ -609,7 +616,7 @@ export async function handleConversationJob(
       await services.store.quarantineBatch(key, reason, activeBatch?.batchKey).catch(() => undefined);
       await services.store.markManualReview(key, reason).catch(() => undefined);
       await services.crm.reportReview?.(chatId.split("@")[0], {
-        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        issueId: activeBatch?.batchKey ?? recoveryIssueId(key),
         reason,
         state: "review_required",
         instanceId,
@@ -663,7 +670,7 @@ export async function handleConversationJob(
       await services.store.quarantineBatch(key, reason, activeBatch?.batchKey).catch(() => undefined);
       await services.store.markManualReview(key, reason).catch(() => undefined);
       await services.crm.reportReview?.(chatId.split("@")[0], {
-        issueId: activeBatch?.batchKey ?? `recovery:${key}`,
+        issueId: activeBatch?.batchKey ?? recoveryIssueId(key),
         reason,
         state: "review_required",
         instanceId,
@@ -691,7 +698,7 @@ export async function handleConversationJob(
             const reason = "queued owner message is older than 24 hours or has no reliable timestamp; manager review required";
             await services.store.markManualReview(key, reason);
             await services.crm.reportReview?.(chatId.split("@")[0], {
-              issueId: `recovery:${key}`,
+              issueId: recoveryIssueId(key),
               reason,
               state: "review_required",
               instanceId,

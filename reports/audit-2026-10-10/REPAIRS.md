@@ -57,16 +57,17 @@
 | F06: redelivery не восстанавливает failed proxy | retry существующего failed ID + ограниченные фоновые повторы |
 | F07: placeholder аудио закрывает расшифровку | merge по message ID с точным текстом каждого аудио |
 | F08: секунды смешаны с миллисекундами | нормализация ingress и старой локальной истории |
-| F09: ручной ответ с телефона не останавливает бота | любой unmarked phone outgoing = takeover; marked initial outreach исключён |
+| F09: ручной ответ с телефона не останавливает бота | любой unmarked phone outgoing = постоянная пауза Redis; marked initial outreach исключён |
 | F10: неисправности и handoff не видны оператору | private manual Interaction, список/баннер CRM, частное уведомление, recovery counters в ready |
 | applied:false игнорируется | прекращение текущего batch без ложного успеха |
 | неоднозначное «да» становится согласием | уточняющий вопрос до записи статуса |
 | сервис резервирует слишком большой ответ | cooperation request: max_tokens ≤512, temperature=0 |
 | временная кредитная резервация HTTP402 считается постоянной | in-flight reservation повторяется; обычная нехватка средств требует проверки |
+| recovery ID содержит недопустимый для CRM символ @ | стабильный SHA-256 issueId для pending без batch ID |
 
 ## Проверка
 
-- Batymi: 257 тестов прошли, включая реальные Redis/BullMQ на отдельном
+- Batymi: 259 тестов прошли, включая реальные Redis/BullMQ на отдельном
   временном Redis. Typecheck и build прошли. Обычные тесты используют заглушку
   LLM и не расходуют OpenRouter. Redis тесты не обращаются к модели.
 - CRM: 59 целевых тестов webhook/status/review/instances/dispatch прошли.

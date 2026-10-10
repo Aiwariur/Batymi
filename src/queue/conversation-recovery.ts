@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { Services } from "../services";
 import { debounceTtlMs } from "../buffer/keys";
+import { recoveryIssueId } from "../observability/agent-review";
 
 const MAX_AUTO_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 const RECOVERY_BACKOFF_MS = 60_000;
@@ -34,7 +35,7 @@ export async function recoverOrphanConversations(services: Services): Promise<Re
         const pausedBatch = await services.store.getActiveBatch(conversationKey);
         const [instanceId, chatId] = conversationKey.split(":");
         await services.crm.reportReview?.(chatId?.split("@")[0] ?? "", {
-          issueId: pausedBatch?.batchKey ?? `recovery:${conversationKey}`,
+          issueId: pausedBatch?.batchKey ?? recoveryIssueId(conversationKey),
           reason: manualHandoff,
           state: "review_required",
           instanceId,
@@ -79,7 +80,7 @@ export async function recoverOrphanConversations(services: Services): Promise<Re
         await services.store.markManualReview(conversationKey, reason);
         const [instanceId, chatId] = conversationKey.split(":");
         await services.crm.reportReview?.(chatId?.split("@")[0] ?? "", {
-          issueId: active?.batchKey ?? `recovery:${conversationKey}`,
+          issueId: active?.batchKey ?? recoveryIssueId(conversationKey),
           reason,
           state: "review_required",
           instanceId,

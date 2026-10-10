@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { recoverOrphanConversations } from "../../src/queue/conversation-recovery";
 import { createHarness } from "../helpers/harness";
+import { recoveryIssueId } from "../../src/observability/agent-review";
 
 describe("orphan conversation recovery", () => {
   it("schedules a recent pending batch once and respects its debounce token", async () => {
@@ -19,6 +20,11 @@ describe("orphan conversation recovery", () => {
 
   it("moves old or untimestamped orphan messages to manual review without scheduling", async () => {
     const h = createHarness();
+    const issueIds: string[] = [];
+    h.services.crm.reportReview = async (_phone, review) => {
+      issueIds.push(review.issueId);
+      return { applied: true, issueId: review.issueId, status: "recorded", notification: "not_required" };
+    };
     const oldMessage = h.makeMessage({
       instanceId: "recovery-line",
       chatId: "995550002222@c.us",
@@ -32,6 +38,17 @@ describe("orphan conversation recovery", () => {
     expect(summary.manualReview).toBe(1);
     expect(h.scheduler.jobs).toHaveLength(0);
     expect(await h.store.getManualHandoff(key)).toContain("older than 24 hours");
+    expect(issueIds).toEqual([recoveryIssueId(key)]);
+    expect(issueIds[0]).toMatch(/^recovery:[A-Za-z0-9_.:-]{1,128}$/);
+  });
+
+  it("creates stable CRM-safe recovery IDs from real conversation keys", () => {
+    const key = "710722745547:995555123456@c.us";
+    const issueId = recoveryIssueId(key);
+
+    expect(issueId).toMatch(/^recovery:[A-Za-z0-9_.:-]{1,128}$/);
+    expect(recoveryIssueId(key)).toBe(issueId);
+    expect(issueId).not.toContain("@");
   });
 
   it("does not reschedule an ambiguous outbound intent", async () => {

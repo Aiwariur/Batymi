@@ -362,6 +362,36 @@ describe("LLM cooperation handoff execution", () => {
     expect((await h.scheduler.runAll())[0]?.status).toBe("skipped");
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
+  it("persists a manual phone takeover across later batches without CRM history or automation", async () => {
+    const { h, instanceId, phone, message } = setup();
+    const interactions = vi.mocked(h.services.crm.getInteractions);
+    const initialOutreach = {
+      id: 1, direction: "outgoing" as const, sender: "phone", instance_id: instanceId,
+      sent_at: "2026-10-09T07:41:35Z", text: "Initial outreach", notes: "cooperation_outreach:v1:102",
+    };
+    interactions.mockResolvedValueOnce([initialOutreach, {
+      id: 2, direction: "outgoing", sender: "phone", instance_id: instanceId,
+      sent_at: "2026-10-09T07:43:00Z", text: "Дальше отвечаю лично",
+    }]).mockResolvedValue([initialOutreach]);
+    const key = h.key(instanceId, `${phone.slice(1)}@c.us`);
+
+    await h.ingest(message("Первая реплика после вмешательства"));
+    expect((await h.scheduler.runAll())[0]?.status).toBe("skipped");
+    expect(await h.store.getManualHandoff(key)).toBe("manager_takeover");
+    expect(await h.store.getActiveBatch(key)).toBeNull();
+    expect(await h.store.pendingCount(key)).toBe(0);
+
+    await h.ingest(message("Следующий вопрос после очистки CRM-истории"));
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "skipped", stopConversation: true });
+    expect(await h.store.getManualHandoff(key)).toBe("manager_takeover");
+    expect(await h.store.getActiveBatch(key)).toBeNull();
+    expect(await h.store.pendingCount(key)).toBe(0);
+    expect(interactions).toHaveBeenCalledTimes(1);
+    expect(h.llm.calls).toHaveLength(0);
+    expect((await h.crm.getListingsByPhone(phone)).every(row => row.crm_status === "new")).toBe(true);
+    expect(h.debug.snapshot().crmActions).toHaveLength(0);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it("quarantines an uncertain send without running the model or sender again", async () => {
     const { h, message } = setup();
     h.llm.responder = () => decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
