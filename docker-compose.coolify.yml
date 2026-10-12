@@ -43,7 +43,8 @@ services:
       - LOG_MESSAGE_CONTENT=false
     # Coolify appends this middleware to its generated routers on deploy.
     labels:
-      - "traefik.http.middlewares.batymi-webhook-size.buffering.maxRequestBodyBytes=${WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES:-33554432}"
+      # Coolify escapes env expressions in labels; keep the proxy cap literal.
+      - "traefik.http.middlewares.batymi-webhook-size.buffering.maxRequestBodyBytes=33554432"
       - "traefik.http.middlewares.batymi-webhook-size.buffering.memRequestBodyBytes=1048576"
       - "coolify.traefik.middlewares=batymi-webhook-size"
     depends_on:
