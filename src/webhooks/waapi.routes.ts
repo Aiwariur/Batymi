@@ -8,6 +8,19 @@ import { ingestMessage } from "../buffer/message-buffer";
 import { prepareWaApiMedia } from "../crm/webhook-proxy";
 import { AudioInputError } from "../transcription/transcription.service";
 
+function safeMessageType(body: unknown): string {
+  const type = (body as { data?: { message?: { type?: unknown } } } | null)?.data?.message?.type;
+  return typeof type === "string" && ["chat", "ptt", "audio", "image", "document", "video"].includes(type)
+    ? type : "unknown";
+}
+
+function audioRejectionReason(error: AudioInputError): string {
+  if (error.message === "invalid audio base64") return "invalid_audio_base64";
+  if (error.message === "unsupported audio MIME") return "unsupported_audio_mime";
+  if (error.message.includes("exceeds")) return "audio_byte_limit";
+  return "invalid_audio_input";
+}
+
 /** Called by the durable forwarding worker after CRM receipt, also by the mock harness. */
 export async function ingestWaApiPayload(instanceId: string, payload: WaApiWebhookPayload, services: Services) {
   const m = payload.data.message;
@@ -34,8 +47,13 @@ export function registerWaApiRoutes(app: FastifyInstance, services: Services): v
     if (!instance || instance.provider !== "waapi" || !expected.length || received.length !== expected.length || !timingSafeEqual(received, expected))
       return reply.code(401).send({ ok: false, error: "unauthorized webhook" });
     const parsed = waApiWebhookSchema.safeParse(request.body);
-    if (!parsed.success || parsed.data.instanceId !== instanceId)
+    if (!parsed.success || parsed.data.instanceId !== instanceId) {
+      services.logger.warn({ instanceId, messageType: safeMessageType(request.body),
+        reason: parsed.success ? "instance_mismatch" : "schema_rejected",
+        ...(!parsed.success ? { issues: parsed.error.issues.map(issue => ({ code: issue.code, path: issue.path })) } : {}),
+      }, "waapi.webhook.rejected");
       return reply.code(400).send({ ok: false, error: "invalid WaAPI payload or instance" });
+    }
     try {
       const boundedPayload = prepareWaApiMedia(parsed.data, services.config.audioMaxBytes);
       // Real ingress only acknowledges a durable job. That job owns both CRM delivery
@@ -44,7 +62,11 @@ export function registerWaApiRoutes(app: FastifyInstance, services: Services): v
       if (services.webhookProxy.handlesWaApiIngress) return { ok: true, queued: true };
       return await ingestWaApiPayload(instanceId, waApiWebhookSchema.parse(boundedPayload), services);
     } catch (error) {
-      if (error instanceof AudioInputError) return reply.code(error.message.includes("exceeds") ? 413 : 400).send({ ok: false, error: error.message });
+      if (error instanceof AudioInputError) {
+        services.logger.warn({ instanceId, messageType: safeMessageType(request.body), reason: audioRejectionReason(error) },
+          "waapi.webhook.rejected");
+        return reply.code(error.message.includes("exceeds") ? 413 : 400).send({ ok: false, error: error.message });
+      }
       services.logger.warn({ instanceId }, "waapi.webhook.pending");
       return reply.code(503).send({ ok: false, error: "webhook processing unavailable" });
     }

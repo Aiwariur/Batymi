@@ -86,6 +86,48 @@ describe("WaAPI transport", () => {
       expect(h.debug.snapshot().forwardedWebhooks).toHaveLength(0);
     } finally { await app.close(); }
   });
+  it("logs safe diagnostics for malformed authenticated payloads without logging submitted values", async () => {
+    const h = createHarness({ WAAPI_INSTANCE_ID: "105907", WAAPI_WEBHOOK_SECRET: "line-secret" });
+    const lines: string[] = [];
+    h.services.logger = createLogger({ level: "trace", pretty: false }, { write: line => { lines.push(line); } });
+    const app = buildApp(h.services, { redisConnected: true, workerStarted: true });
+    const payload = {
+      ...fixture(),
+      data: { message: { ...fixture().data.message, type: "ptt", timestamp: "private_text",
+        _serialized: "fake_secret", media: { data: "BASE64_PRIVATE_MARKER", filename: "private_text" } } },
+      private: "private_text",
+    };
+    try {
+      expect((await app.inject({ method: "POST", url: "/webhooks/waapi/105907/line-secret", payload })).statusCode).toBe(400);
+      const records = lines.map(line => JSON.parse(line));
+      const diagnostic = records.find(record => record.reason === "schema_rejected");
+      expect(diagnostic).toMatchObject({ instanceId: "105907", messageType: "ptt", reason: "schema_rejected" });
+      expect(diagnostic.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: expect.any(String), path: ["data", "message", "timestamp"] }),
+      ]));
+      const logs = lines.join("");
+      for (const privateValue of ["line-secret", "fake_secret", "private_text", "BASE64_PRIVATE_MARKER"]) {
+        expect(logs).not.toContain(privateValue);
+      }
+    } finally { await app.close(); }
+  });
+  it("logs a fixed safe reason when inline audio is missing and preserves the 400 response", async () => {
+    const h = createHarness({ WAAPI_INSTANCE_ID: "105907", WAAPI_WEBHOOK_SECRET: "line-secret" });
+    const lines: string[] = [];
+    h.services.logger = createLogger({ level: "trace", pretty: false }, { write: line => { lines.push(line); } });
+    const app = buildApp(h.services, { redisConnected: true, workerStarted: true });
+    const payload = { ...fixture(), data: { message: { ...fixture().data.message, type: "ptt" } } };
+    try {
+      expect((await app.inject({ method: "POST", url: "/webhooks/waapi/105907/line-secret", payload })).statusCode).toBe(400);
+      const records = lines.map(line => JSON.parse(line));
+      expect(records).toContainEqual(expect.objectContaining({ instanceId: "105907", messageType: "ptt",
+        reason: "invalid_audio_base64" }));
+      const logs = lines.join("");
+      for (const privateValue of ["line-secret", "private_text", "BASE64_PRIVATE_MARKER"]) {
+        expect(logs).not.toContain(privateValue);
+      }
+    } finally { await app.close(); }
+  });
   it("buffers only inbound message, retains literal ID and deduplicates duplicates", async () => {
     const { h, app, post } = setup();
     try {
