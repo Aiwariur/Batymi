@@ -7,6 +7,8 @@ import { DebugRecorder } from "../observability/debug-recorder";
 import { Services } from "../services";
 import { waApiWebhookSchema } from "../waapi/waapi.schemas";
 import { ingestWaApiPayload } from "../webhooks/waapi.routes";
+import { validateInlineAudio } from "../transcription/transcription.service";
+import { isWaApiLid, isWaApiPhone } from "../webhooks/waapi.normalizer";
 
 const WEBHOOK_FORWARD_QUEUE = "webhook-forward";
 const REQUEST_TIMEOUT_MS = 15000;
@@ -88,9 +90,25 @@ export class BullWebhookProxy implements WebhookProxy {
 
   async forward(instanceId: string, payload: unknown): Promise<void> {
     const jobId = webhookForwardJobId(instanceId, payload);
+    // Keep duplicate recovery possible even when a stopped consumer fills the queue.
+    const existing = await this.queue.getJob(jobId);
+    if (existing) {
+      if ((await existing.getState()) === "failed") await existing.retry("failed");
+      return;
+    }
+    const safe = payload && typeof payload === "object" && "event" in payload
+      ? prepareWaApiMedia(payload, 20 * 1024 * 1024) : payload;
+    const inlineAudio = safe && typeof safe === "object" && "event" in safe
+      ? waApiWebhookSchema.parse(safe).data.media?.data : undefined;
+    // Capacity protects private audio storage; delivery/status metadata must keep flowing.
+    if (inlineAudio) {
+      const counts = await this.queue.getJobCounts("wait", "active", "delayed", "paused", "failed", "prioritized");
+      if (Object.values(counts).reduce((total, count) => total + count, 0) >= 100)
+        throw Error("webhook queue capacity exceeded");
+    }
     const job = await this.queue.add(
       "forward",
-      { instanceId, payload },
+      { instanceId, payload: safe },
       { jobId },
     );
     // BullMQ deduplicates by job id, including jobs retained in failed state.
@@ -133,7 +151,7 @@ export class MockWebhookProxy implements WebhookProxy {
     const jobId = webhookForwardJobId(instanceId, payload);
     if (this.forwarded.has(jobId)) return;
     this.forwarded.add(jobId);
-    this.debug.recordForwardedWebhook(instanceId, payload);
+    this.debug.recordForwardedWebhook(instanceId, payload && typeof payload === "object" && "event" in payload ? stripWaApiMedia(payload) : payload);
   }
 
   async close(): Promise<void> {
@@ -185,7 +203,10 @@ export function stripWaApiMedia(payload: unknown): unknown {
   const parsed = waApiWebhookSchema.parse(payload);
   const media = parsed.data.media;
   const m = parsed.data.message;
-  const { media: _media, message: _message, _data: _raw, ...metadata } = parsed.data;
+  // Explicit metadata fields: unknown provider objects may contain another blob.
+  const metadata = Object.fromEntries(["status", "state", "reason", "acknowledged"]
+    .filter(key => ["string", "number", "boolean"].includes(typeof parsed.data[key]))
+    .map(key => [key, parsed.data[key]]));
   const message = m ? { id: { _serialized: m.id._serialized, fromMe: m.id.fromMe, remote: m.id.remote },
     fromMe: m.fromMe, from: m.from, to: m.to, type: m.type, body: m.body, timestamp: m.timestamp,
     ack: m.ack, hasMedia: m.hasMedia, isStatus: m.isStatus, isGroupMsg: m.isGroupMsg } : undefined;
@@ -193,6 +214,26 @@ export function stripWaApiMedia(payload: unknown): unknown {
     mimetype: media.mimetype, ...(media.filename ? { filename: media.filename } : {}),
     ...(media.filesize !== undefined ? { filesize: media.filesize } : {}),
   } } : {}) } };
+}
+
+/** Keep bytes only for an inbound audio job, never image/video/document or echoes. */
+export function prepareWaApiMedia(payload: unknown, maxAudioBytes: number): unknown {
+  const parsed = waApiWebhookSchema.parse(payload);
+  const safe = stripWaApiMedia(parsed) as { data: Record<string, unknown> };
+  const message = parsed.data.message;
+  if (parsed.event === "message" && message && !message.fromMe && !message.isStatus && !message.isGroupMsg &&
+      (isWaApiPhone(message.from) || isWaApiLid(message.from)) &&
+      (!message.id.remote || isWaApiPhone(message.id.remote) || isWaApiLid(message.id.remote)) &&
+      ["audio", "ptt"].includes(message.type)) {
+    const media = parsed.data.media;
+    if (!media?.data) {
+      validateInlineAudio({ data: "", mimetype: media?.mimetype ?? "audio/ogg" }, maxAudioBytes);
+    } else {
+      validateInlineAudio(media as { data: string; mimetype: string }, maxAudioBytes);
+      safe.data.media = { ...(safe.data.media as object), data: media.data };
+    }
+  }
+  return safe;
 }
 
 export function createWebhookProxyWorker(
@@ -208,6 +249,8 @@ export function createWebhookProxyWorker(
       if (job.data.payload && typeof job.data.payload === "object" && "event" in job.data.payload) {
         if (!services) throw Error("WaAPI ingress services unavailable");
         await ingestWaApiPayload(job.data.instanceId, waApiWebhookSchema.parse(job.data.payload), services);
+        // Completed job IDs stay for dedup, but private audio must not stay with them.
+        await job.updateData({ ...job.data, payload: stripWaApiMedia(job.data.payload) });
       }
     },
     { connection, concurrency: 10 },

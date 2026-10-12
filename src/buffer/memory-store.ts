@@ -8,6 +8,7 @@ import {
   ConversationStore,
   OutboundIntent,
   validateAgentCheckpoint,
+  InboundBufferFullError,
 } from "./conversation-store";
 
 interface ExpiringValue<T> {
@@ -39,7 +40,14 @@ export class MemoryConversationStore implements ConversationStore {
     token: string;
     idempotencyTtlSeconds: number;
     debounceTtlMs: number;
+    maxPendingBytes?: number;
   }): Promise<boolean> {
+    const seen = this.seen.get(`${input.instanceId}:${input.idMessage}`);
+    if (seen !== undefined && seen > Date.now()) return false;
+    const pending = this.pending.get(input.conversationKey) ?? [];
+    const bytes = pending.reduce((total, message) => total + Buffer.byteLength(JSON.stringify(message)), 0);
+    if (pending.length >= 1000 || bytes + Buffer.byteLength(JSON.stringify(input.message)) > (input.maxPendingBytes ?? 32 * 1024 * 1024))
+      throw new InboundBufferFullError();
     const isNew = await this.markSeen(input.instanceId, input.idMessage, input.idempotencyTtlSeconds);
     if (!isNew) return false;
     await this.pushPending(input.conversationKey, input.message);

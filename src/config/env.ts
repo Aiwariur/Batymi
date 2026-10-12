@@ -22,6 +22,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().default("0.0.0.0"),
   PORT: z.coerce.number().int().positive().default(3000),
+  WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES: z.coerce.number().int().positive().max(32 * 1024 * 1024).default(32 * 1024 * 1024),
+  AUDIO_MAX_BYTES: z.coerce.number().int().positive().max(20 * 1024 * 1024).default(20 * 1024 * 1024),
 
   REDIS_URL: z.string().default("redis://localhost:6379"),
 
@@ -82,6 +84,8 @@ export interface Config {
   isProduction: boolean;
   host: string;
   port: number;
+  whatsappWebhookBodyLimitBytes: number;
+  audioMaxBytes: number;
 
   redisUrl: string;
 
@@ -171,6 +175,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     isProduction: e.NODE_ENV === "production",
     host: e.HOST,
     port: e.PORT,
+    whatsappWebhookBodyLimitBytes: e.WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES,
+    audioMaxBytes: e.AUDIO_MAX_BYTES,
 
     redisUrl: e.REDIS_URL,
 

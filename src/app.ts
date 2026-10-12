@@ -13,7 +13,7 @@ export interface RuntimeState {
 export function buildApp(services: Services, runtime: RuntimeState): FastifyInstance {
   const app = Fastify({
     loggerInstance: services.logger as unknown as FastifyBaseLogger,
-    bodyLimit: 5 * 1024 * 1024,
+    bodyLimit: services.config.whatsappWebhookBodyLimitBytes,
     // Fastify's default access log includes the URL; WaAPI keeps a secret in it.
     logController: new LogController({ disableRequestLogging: true }),
   });

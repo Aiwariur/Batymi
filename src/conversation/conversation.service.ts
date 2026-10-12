@@ -104,8 +104,8 @@ async function resolveBatchText(
   for (const message of batch) {
     if (message.type === "text" && message.text) {
       parts.push(message.text);
-    } else if (message.type === "audio" && message.fileUrl) {
-      const transcript = await services.transcription.transcribe(message.fileUrl);
+    } else if (message.type === "audio" && (message.audio || message.fileUrl)) {
+      const transcript = await services.transcription.transcribe(message.audio ?? message.fileUrl!);
       if (transcript) {
         message.text = transcript;
         parts.push(transcript);

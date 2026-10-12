@@ -8,7 +8,7 @@ export interface NormalizedMessage {
   type: MessageType;
   text?: string;
   fileUrl?: string;
-  /** Stage 7 consumes inline WaAPI audio; legacy fileUrl remains supported. */
+  /** Bounded inline WaAPI audio; legacy fileUrl remains supported until stage 10. */
   audio?: { data: string; mimetype: string; filename?: string };
   rawChatId?: string;
   timestamp: number;

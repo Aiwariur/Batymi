@@ -1,6 +1,6 @@
 # Batymi — движок ответов собственникам (долгосрочная аренда)
 
-## WaAPI transport (локальный этап 6, production не переключён)
+## WaAPI transport/media (локальные этапы 6–7, production не переключён)
 
 `POST /webhooks/waapi/:instanceId/:secret` проверяет активную CRM-линию,
 provider, per-line secret (constant-time) и совпадение payload instanceId до
@@ -29,12 +29,36 @@ LID разрешается `get-lid {contactIds:[rawChatId]}` с Bearer акка
 `NormalizedMessage`: literal `idMessage=id._serialized`, canonical PN `chatId`,
 `senderPhone` без `+`, `rawChatId`, `timestamp=seconds*1000`, прежние type/text.
 Audio имеет `audio:{data:base64,mimetype,filename?}`; optional `fileUrl` остаётся
-legacy. Подключение inline audio к транскрипции и media limits — этап 7.
+legacy до этапа 10. `transcribe(input)` принимает URL или
+`{base64,mimetype,filename?}` (также WaAPI `{data:base64,...}`), inline bytes без download. OGG/Opus
+(`audio/ogg; codecs=opus`) и отсутствие filename поддерживаются; MIME выбирает
+безопасное имя audio.ogg/mp3/m4a/wav/webm/flac. Model/provider/timeouts и логика
+диалога сохранены. Invalid/empty/noncanonical base64 или MIME → безопасный 400
+до enqueue; oversized audio → 413. Legacy download ограничен Content-Length и
+потоком; bytes/URL/provider error body не логируются.
+
+`WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES=33554432` (32 MiB, максимум) — полный JSON
+в Fastify/Flask/подготовленном Coolify Traefik; `AUDIO_MAX_BYTES=20971520`
+(20 MiB, максимум) — decoded audio. Уменьшать body limit согласованно в обоих
+сервисах. Синтетическое 20 MiB video (~26.67 MiB base64) проходит локальный
+ingress; excess JSON → 413 до proxy/storage. Compose задаёт buffering middleware
+через `coolify.traefik.middlewares`; binding/router/logs — живая проверка этапа 9.
+Non-audio, echo, group/status blobs удаляются до durable enqueue; caption остаётся.
+Только direct inbound audio сохраняет bytes для recovery; успешный worker после
+owner ingest удаляет bytes из job, сохраняя dedup ID. CRM proxy retries без blob.
+Owner pending buffer атомарно ограничен 32 MiB сериализованных сообщений (или
+меньшим body limit) и 1000 entries; active batch ограничен отдельно. Переполнение
+не ставит seen-marker, retry после drain возможен. Proxy admission отклоняет новый
+WaAPI audio job при >=100 outstanding jobs, сохраняя duplicate recovery и
+пропуская delivery/status/metadata без blob; этот порог
+может кратко превышаться конкурентными admissions, это не атомарный hard cap.
+Paused owner input не вызывает transcription/LLM/send/CRM actions и не сохраняет
+audio/fileUrl в owner buffer. CRM transport receipt/history продолжает сохраняться.
 
 Proxy ID — `waapi_<sha256(instanceId,event,serializedId,ack-for-message_ack)>`;
 status без message использует data. Бизнес-дедуп отдельно: seen/ingress-scheduled
 по instance+literal ID, conversation keys — instance+canonical PN. BullMQ хранит
-raw payload для восстановления, 3 exponential attempts и прежние 3 bounded
+bounded audio payload для восстановления, 3 exponential attempts и прежние 3 bounded
 recovery passes; успех после CRM, но до ingest безопасно повторяется. Прямой
 CRM receipt не запускает owner pipeline. Secrets/payload не пишутся в proxy logs,
 application request URLs редактируются; reverse-proxy logs проверяются в этапе 9.

@@ -24,6 +24,8 @@ services:
       - WHATSAPP_INSTANCE_SOURCE=${WHATSAPP_INSTANCE_SOURCE:-${GREENAPI_INSTANCE_SOURCE:-crm}}
       - WAAPI_API_TOKEN=${WAAPI_API_TOKEN:-}
       - WAAPI_BASE_URL=${WAAPI_BASE_URL:-https://waapi.app/api/v1}
+      - WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES=${WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES:-33554432}
+      - AUDIO_MAX_BYTES=${AUDIO_MAX_BYTES:-20971520}
       # Легаси-настройки / необязательная привязка существующей линии к менеджеру.
       - GREENAPI_INSTANCE_1_ID=${GREENAPI_INSTANCE_1_ID:-}
       - GREENAPI_INSTANCE_1_MANAGER_ID=${GREENAPI_INSTANCE_1_MANAGER_ID:-}
@@ -39,6 +41,11 @@ services:
       - WORKER_ENABLED=true
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_MESSAGE_CONTENT=false
+    # Coolify appends this middleware to its generated routers on deploy.
+    labels:
+      - "traefik.http.middlewares.batymi-webhook-size.buffering.maxRequestBodyBytes=${WHATSAPP_WEBHOOK_BODY_LIMIT_BYTES:-33554432}"
+      - "traefik.http.middlewares.batymi-webhook-size.buffering.memRequestBodyBytes=1048576"
+      - "coolify.traefik.middlewares=batymi-webhook-size"
     depends_on:
       redis:
         condition: service_healthy

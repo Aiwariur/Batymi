@@ -8,6 +8,7 @@ import {
   ConversationStore,
   OutboundIntent,
   validateAgentCheckpoint,
+  InboundBufferFullError,
 } from "./conversation-store";
 import {
   activeBatchKey,
@@ -53,6 +54,12 @@ return 0
 
 const ACCEPT_INBOUND_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+if redis.call('LLEN', KEYS[2]) >= 1000 then return -1 end
+local bytes = string.len(ARGV[2])
+for _, message in ipairs(redis.call('LRANGE', KEYS[2], 0, -1)) do
+  bytes = bytes + string.len(message)
+end
+if bytes > tonumber(ARGV[5]) then return -1 end
 redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])
 redis.call('RPUSH', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], ARGV[3], 'PX', ARGV[4])
@@ -170,6 +177,7 @@ export class RedisConversationStore implements ConversationStore {
     token: string;
     idempotencyTtlSeconds: number;
     debounceTtlMs: number;
+    maxPendingBytes?: number;
   }): Promise<boolean> {
     const result = await this.redis.eval(
       ACCEPT_INBOUND_SCRIPT,
@@ -181,7 +189,9 @@ export class RedisConversationStore implements ConversationStore {
       JSON.stringify(input.message),
       input.token,
       String(Math.max(1, Math.round(input.debounceTtlMs))),
+      String(input.maxPendingBytes ?? 32 * 1024 * 1024),
     );
+    if (Number(result) === -1) throw new InboundBufferFullError();
     return Number(result) === 1;
   }
 

@@ -6,6 +6,10 @@ export interface AcquiredLock {
   token: string;
 }
 
+export class InboundBufferFullError extends Error {
+  constructor() { super("conversation buffer exceeds byte limit"); }
+}
+
 export type OutboundIntentState = "prepared" | "sending" | "sent" | "ambiguous";
 
 export interface OutboundIntent {
@@ -84,6 +88,7 @@ export interface ConversationStore {
     token: string;
     idempotencyTtlSeconds: number;
     debounceTtlMs: number;
+    maxPendingBytes?: number;
   }): Promise<boolean>;
 
   /** Returns true when this (instanceId, idMessage) pair was seen for the first time. */

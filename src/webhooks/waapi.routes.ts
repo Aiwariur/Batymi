@@ -5,6 +5,8 @@ import { waApiWebhookSchema, WaApiWebhookPayload } from "../waapi/waapi.schemas"
 import { resolveWaApiChat } from "../waapi/lid-resolver";
 import { normalizeWaApiWebhook, isWaApiLid, isWaApiPhone } from "./waapi.normalizer";
 import { ingestMessage } from "../buffer/message-buffer";
+import { prepareWaApiMedia } from "../crm/webhook-proxy";
+import { AudioInputError } from "../transcription/transcription.service";
 
 /** Called by the durable forwarding worker after CRM receipt, also by the mock harness. */
 export async function ingestWaApiPayload(instanceId: string, payload: WaApiWebhookPayload, services: Services) {
@@ -35,12 +37,14 @@ export function registerWaApiRoutes(app: FastifyInstance, services: Services): v
     if (!parsed.success || parsed.data.instanceId !== instanceId)
       return reply.code(400).send({ ok: false, error: "invalid WaAPI payload or instance" });
     try {
+      const boundedPayload = prepareWaApiMedia(parsed.data, services.config.audioMaxBytes);
       // Real ingress only acknowledges a durable job. That job owns both CRM delivery
       // and inbound buffering, so an ingestion crash does not rely on provider retries.
-      await services.webhookProxy.forward(instanceId, parsed.data);
+      await services.webhookProxy.forward(instanceId, boundedPayload);
       if (services.webhookProxy.handlesWaApiIngress) return { ok: true, queued: true };
-      return await ingestWaApiPayload(instanceId, parsed.data, services);
-    } catch {
+      return await ingestWaApiPayload(instanceId, waApiWebhookSchema.parse(boundedPayload), services);
+    } catch (error) {
+      if (error instanceof AudioInputError) return reply.code(error.message.includes("exceeds") ? 413 : 400).send({ ok: false, error: error.message });
       services.logger.warn({ instanceId }, "waapi.webhook.pending");
       return reply.code(503).send({ ok: false, error: "webhook processing unavailable" });
     }

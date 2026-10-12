@@ -34,6 +34,11 @@ export async function ingestMessage(
   }
 
   const key = conversationKey(message.instanceId, message.chatId);
+  // A paused dialogue keeps history metadata, never another private audio blob.
+  if (await services.store.getManualHandoff(key)) {
+    const { audio: _audio, fileUrl: _fileUrl, ...metadata } = message;
+    message = metadata;
+  }
   const token = randomUUID();
   const isNew = await services.store.acceptInbound({
     instanceId: message.instanceId,
@@ -43,6 +48,7 @@ export async function ingestMessage(
     token,
     idempotencyTtlSeconds: services.config.idempotencyTtlSeconds,
     debounceTtlMs: debounceTtlMs(services.config.messageDebounceMs),
+    maxPendingBytes: services.config.whatsappWebhookBodyLimitBytes,
   });
   if (!isNew) {
     if (await services.store.isIngressScheduled(message.instanceId, message.idMessage)) {
