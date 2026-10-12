@@ -19,7 +19,7 @@ describe("CRM instance membership", () => {
     await registry.refresh();
     expect(config.instances.map(i => i.id)).toEqual(["1001", "1002"]);
     expect(config.instances[0].managerId).toBe(4);
-    expect(fetcher.mock.calls[0][0]).toBe("https://crm.example/api/whatsapp-instances");
+    expect(fetcher.mock.calls[0][0]).toBe("https://crm.example/api/whatsapp-instances?includeSecrets=1");
     expect(fetcher.mock.calls[0][1].headers).toEqual({ "X-API-Key": "test-key" });
   });
 

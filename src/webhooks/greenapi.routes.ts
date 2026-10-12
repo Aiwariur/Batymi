@@ -101,7 +101,7 @@ export function registerGreenApiRoutes(app: FastifyInstance, services: Services)
       reply.code(503);
       return { ok: false, error: "CRM instance registry unavailable" };
     }
-    if (!instance) {
+    if (!instance || instance.provider === "waapi") {
       reply.code(404);
       return { ok: false, error: "unknown GreenAPI instance" };
     }

@@ -20,6 +20,10 @@ services:
       - GREENAPI_WEBHOOK_SECRET=${GREENAPI_WEBHOOK_SECRET:-}
       # Активные линии берутся из настроек CRM; повторная регистрация не нужна.
       - GREENAPI_INSTANCE_SOURCE=${GREENAPI_INSTANCE_SOURCE:-crm}
+      # Prepared WaAPI transport; membership/secrets remain owned by the CRM.
+      - WHATSAPP_INSTANCE_SOURCE=${WHATSAPP_INSTANCE_SOURCE:-${GREENAPI_INSTANCE_SOURCE:-crm}}
+      - WAAPI_API_TOKEN=${WAAPI_API_TOKEN:-}
+      - WAAPI_BASE_URL=${WAAPI_BASE_URL:-https://waapi.app/api/v1}
       # Легаси-настройки / необязательная привязка существующей линии к менеджеру.
       - GREENAPI_INSTANCE_1_ID=${GREENAPI_INSTANCE_1_ID:-}
       - GREENAPI_INSTANCE_1_MANAGER_ID=${GREENAPI_INSTANCE_1_MANAGER_ID:-}

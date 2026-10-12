@@ -41,6 +41,9 @@ const envSchema = z.object({
   // GreenAPI's native webhookUrlToken is sent as Authorization: Bearer ...
   GREENAPI_WEBHOOK_SECRET_HEADER: z.string().trim().min(1).default("authorization"),
   GREENAPI_INSTANCE_SOURCE: z.enum(["env", "crm"]).default("env"),
+  WHATSAPP_INSTANCE_SOURCE: z.enum(["env", "crm"]).optional(),
+  WAAPI_API_TOKEN: z.string().trim().default(""),
+  WAAPI_BASE_URL: z.string().url().default("https://waapi.app/api/v1"),
 
   LLM_PROVIDER: z.string().default("openai"),
   LLM_MODEL: z.string().default("gpt-4.1"),
@@ -107,6 +110,8 @@ export interface Config {
 
   instances: InstanceConfig[];
   instanceSource: "env" | "crm";
+  waapiApiToken: string;
+  waapiBaseUrl: string;
 
   allowedManagerIds: number[];
   terminalCrmStatuses: string[];
@@ -157,6 +162,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const mockTranscription = e.MOCK_TRANSCRIPTION ?? e.MOCK_EXTERNALS;
 
   const instances = parseInstances(env, e.MOCK_EXTERNALS);
+  const instanceSource = e.WHATSAPP_INSTANCE_SOURCE ?? e.GREENAPI_INSTANCE_SOURCE;
+  if (e.NODE_ENV === "production" && instanceSource === "env" && instances.some(i => i.provider === "waapi"))
+    throw Error("WaAPI production requires the CRM instance registry");
 
   return {
     nodeEnv: e.NODE_ENV,
@@ -190,7 +198,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ownerDialogueMode: e.OWNER_DIALOGUE_MODE,
 
     instances,
-    instanceSource: e.GREENAPI_INSTANCE_SOURCE,
+    instanceSource,
+    waapiApiToken: e.WAAPI_API_TOKEN,
+    waapiBaseUrl: e.WAAPI_BASE_URL.replace(/\/+$/, ""),
 
     allowedManagerIds: parseCsvNumbers(e.ALLOWED_MANAGER_IDS),
     terminalCrmStatuses: [...parseCsv(e.TERMINAL_CRM_STATUSES).map((s) => s.toLowerCase()),

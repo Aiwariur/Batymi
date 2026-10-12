@@ -1,0 +1,18 @@
+{
+  "event": "message",
+  "instanceId": "105907",
+  "data": {
+    "message": {
+      "id": {"id": "text-in-1", "remote": "12025550123@c.us", "fromMe": false, "_serialized": "false_12025550123@c.us_text-in-1"},
+      "fromMe": false,
+      "body": "Fixture",
+      "type": "chat",
+      "timestamp": 1791686400,
+      "from": "12025550123@c.us",
+      "to": "19995550100@c.us",
+      "ack": 0,
+      "hasMedia": false
+    },
+    "media": null
+  }
+}

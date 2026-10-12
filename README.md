@@ -1,5 +1,50 @@
 # Batymi — движок ответов собственникам (долгосрочная аренда)
 
+## WaAPI transport (локальный этап 6, production не переключён)
+
+`POST /webhooks/waapi/:instanceId/:secret` проверяет активную CRM-линию,
+provider, per-line secret (constant-time) и совпадение payload instanceId до
+очереди. Реестр — `GET /api/whatsapp-instances?includeSecrets=1` с `X-API-Key`,
+startup/30 секунд/unknown-ID refresh; null managerId сохраняет env override.
+Токен аккаунта — `WAAPI_API_TOKEN`, URL — `WAAPI_BASE_URL` (по умолчанию
+https://waapi.app/api/v1); secret/baseUrl/provider каждой линии — из CRM.
+`WHATSAPP_INSTANCE_SOURCE=crm` имеет приоритет над legacy
+`GREENAPI_INSTANCE_SOURCE`. `WAAPI_INSTANCE_ID`/`WAAPI_WEBHOOK_SECRET` — только
+локальный env fallback; production с WaAPI требует CRM registry. Старый ingress
+сохранён и не принимает WaAPI-линии. Coolify Compose подготовлен для этих env;
+никакого live переключения здесь нет.
+
+Real ingress отвечает 200 только после durable `webhook-forward` job acceptance.
+Worker сначала проксирует metadata/caption в
+`/api/waapi/webhook/{id}/{currentCrmSecret}`, удалив inline blob и вложенный
+provider `_data`, затем ставит только inbound `event=message` в прежний буфер.
+`message_create`, `message_ack`, status events попадают только в CRM. API echo
+не классифицируется в Batymi: CRM send ledger отличает agent/manager/phone и
+сохраняет quarantine для pending/uncertain. Interaction phone/manager останавливает
+queued/stale reply через прежние history checks и durable pause.
+
+LID разрешается `get-lid {contactIds:[rawChatId]}` с Bearer аккаунтным токеном;
+оба статуса success обязательны, берётся только PN пары с запрошенным LID.
+Неизвестный LID остаётся failed job для bounded retries/recovery, не телефоном.
+`NormalizedMessage`: literal `idMessage=id._serialized`, canonical PN `chatId`,
+`senderPhone` без `+`, `rawChatId`, `timestamp=seconds*1000`, прежние type/text.
+Audio имеет `audio:{data:base64,mimetype,filename?}`; optional `fileUrl` остаётся
+legacy. Подключение inline audio к транскрипции и media limits — этап 7.
+
+Proxy ID — `waapi_<sha256(instanceId,event,serializedId,ack-for-message_ack)>`;
+status без message использует data. Бизнес-дедуп отдельно: seen/ingress-scheduled
+по instance+literal ID, conversation keys — instance+canonical PN. BullMQ хранит
+raw payload для восстановления, 3 exponential attempts и прежние 3 bounded
+recovery passes; успех после CRM, но до ingest безопасно повторяется. Прямой
+CRM receipt не запускает owner pipeline. Secrets/payload не пишутся в proxy logs,
+application request URLs редактируются; reverse-proxy logs проверяются в этапе 9.
+
+[WaAPI webhook docs](https://waapi.readme.io/reference/webhooks) проверены
+2026-10-12: 2xx ожидается; после 3xx/4xx/5xx провайдер **не повторяет** доставку,
+после timeout заявлен retry примерно через 3000 ms. После durable acceptance
+recovery собственный; до сохранения в Redis сбой не гарантирует повтор со стороны
+провайдера. Readiness и Redis persistence требуют живой приёмки этапа 9.
+
 Небольшой backend на TypeScript, который заменяет n8n-агентов
 арендной CRM SS.GE-Rent (`n8n/N8N_AGENT_PROMPT.md` + `n8n/N8N_AGENT_AGREED_PROMPT.md`)
 — обработка входящих WhatsApp-сообщений собственников (GreenAPI + CRM + LLM).

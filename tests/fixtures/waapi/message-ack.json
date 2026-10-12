@@ -1,0 +1,18 @@
+{
+  "event": "message_ack",
+  "instanceId": "105907",
+  "data": {
+    "acknowledged": true,
+    "message": {
+      "id": {"id": "out-1", "remote": "12025550123@c.us", "fromMe": true, "_serialized": "true_12025550123@c.us_out-1"},
+      "fromMe": true,
+      "body": "Fixture",
+      "type": "chat",
+      "timestamp": 1791686403,
+      "from": "19995550100@c.us",
+      "to": "12025550123@c.us",
+      "ack": 1,
+      "hasMedia": false
+    }
+  }
+}

@@ -4,6 +4,9 @@ import type IORedis from "ioredis";
 import { Config } from "../config/env";
 import { Logger } from "../observability/logger";
 import { DebugRecorder } from "../observability/debug-recorder";
+import { Services } from "../services";
+import { waApiWebhookSchema } from "../waapi/waapi.schemas";
+import { ingestWaApiPayload } from "../webhooks/waapi.routes";
 
 const WEBHOOK_FORWARD_QUEUE = "webhook-forward";
 const REQUEST_TIMEOUT_MS = 15000;
@@ -24,6 +27,14 @@ export interface WebhookProxyJobData {
 export function webhookForwardJobId(instanceId: string, payload: unknown): string {
   const body = payload && typeof payload === "object" ? payload as Record<string, unknown> : undefined;
   const idMessage = typeof body?.idMessage === "string" ? body.idMessage : undefined;
+  if (typeof body?.event === "string") {
+    const parsed = waApiWebhookSchema.parse(payload);
+    return `waapi_${createHash("sha256").update(JSON.stringify({ instanceId, event: parsed.event,
+      id: parsed.data.message?.id._serialized,
+      ack: parsed.event === "message_ack" ? parsed.data.message?.ack : undefined,
+      // Connection/status events have no message identity.
+      status: parsed.data.message ? undefined : parsed.data })).digest("hex")}`;
+  }
   // GreenAPI may retry the same id with a new timestamp or object key order.
   // Delivery updates for one message can legitimately have different status
   // values, so status remains part of their key.
@@ -39,15 +50,16 @@ export function webhookForwardJobId(instanceId: string, payload: unknown): strin
 }
 
 /**
- * Прозрачный прокси вебхуков GreenAPI в арендную CRM.
+ * Durable proxy for legacy GreenAPI and WaAPI events to the CRM.
  *
- * Batymi — единственный получатель вебхуков GreenAPI, но CRM остаётся
+ * Batymi — получатель вебхуков провайдера, но CRM остаётся
  * источником правды по interactions (диалоги, has_reply, delivery-статусы,
  * воронка). Каждый сырой вебхук ставится в очередь и форвардится в
- * POST /api/greenapi/webhook/<instanceId> с повторами; ack GreenAPI ждёт
- * только подтверждения постановки BullMQ job, а не ответа CRM.
+ * Provider-specific CRM path with retries. WaAPI jobs also own inbound
+ * buffering after CRM receipt; acknowledgement waits only for durable enqueue.
  */
 export interface WebhookProxy {
+  handlesWaApiIngress?: boolean;
   /** Resolves only once the forwarding job has been durably accepted by BullMQ. */
   forward(instanceId: string, payload: unknown): Promise<void>;
   recoverFailed?(): Promise<number>;
@@ -55,6 +67,7 @@ export interface WebhookProxy {
 }
 
 export class BullWebhookProxy implements WebhookProxy {
+  readonly handlesWaApiIngress = true;
   private readonly queue: Queue<WebhookProxyJobData>;
   private failedRecoveryOffset = 0;
 
@@ -128,61 +141,88 @@ export class MockWebhookProxy implements WebhookProxy {
   }
 }
 
-async function postWebhookToCrm(
+export async function postWebhookToCrm(
   config: Config,
   instanceId: string,
   payload: unknown,
 ): Promise<void> {
   if (!config.crmBaseUrl) throw new Error("CRM_BASE_URL is not configured");
+  const waapi = payload && typeof payload === "object" && "event" in payload;
+  const instance = config.instances.find(row => row.id === instanceId);
+  if (waapi && (instance?.provider !== "waapi" || !instance.webhookSecret)) throw Error("CRM WaAPI line unavailable");
+  const forwarded = waapi ? stripWaApiMedia(payload) : payload;
+  const path = waapi ? `/waapi/webhook/${encodeURIComponent(instanceId)}/${encodeURIComponent(instance!.webhookSecret!)}`
+    : `/greenapi/webhook/${encodeURIComponent(instanceId)}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(
-      `${config.crmBaseUrl}/greenapi/webhook/${encodeURIComponent(instanceId)}`,
+      `${config.crmBaseUrl}${path}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(config.crmApiKey ? { "X-API-Key": config.crmApiKey } : {}),
-          ...(config.webhookSecret ? { Authorization: `Bearer ${config.webhookSecret}` } : {}),
+          ...(!waapi && config.webhookSecret ? { Authorization: `Bearer ${config.webhookSecret}` } : {}),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(forwarded),
         signal: controller.signal,
       },
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`HTTP ${response.status} ${body.slice(0, 200)}`);
+      throw new Error(`CRM webhook failed: HTTP ${response.status}`);
     }
+  } catch (error) {
+    if (error instanceof Error && /^CRM webhook failed: HTTP \d+$/.test(error.message)) throw error;
+    throw Error("CRM webhook request unavailable");
   } finally {
     clearTimeout(timer);
   }
+}
+
+export function stripWaApiMedia(payload: unknown): unknown {
+  const parsed = waApiWebhookSchema.parse(payload);
+  const media = parsed.data.media;
+  const m = parsed.data.message;
+  const { media: _media, message: _message, _data: _raw, ...metadata } = parsed.data;
+  const message = m ? { id: { _serialized: m.id._serialized, fromMe: m.id.fromMe, remote: m.id.remote },
+    fromMe: m.fromMe, from: m.from, to: m.to, type: m.type, body: m.body, timestamp: m.timestamp,
+    ack: m.ack, hasMedia: m.hasMedia, isStatus: m.isStatus, isGroupMsg: m.isGroupMsg } : undefined;
+  return { event: parsed.event, instanceId: parsed.instanceId, data: { ...metadata, ...(message ? { message } : {}), ...(media ? { media: {
+    mimetype: media.mimetype, ...(media.filename ? { filename: media.filename } : {}),
+    ...(media.filesize !== undefined ? { filesize: media.filesize } : {}),
+  } } : {}) } };
 }
 
 export function createWebhookProxyWorker(
   config: Config,
   logger: Logger,
   connection: IORedis,
+  services?: Services,
 ): Worker<WebhookProxyJobData> {
   const worker = new Worker<WebhookProxyJobData>(
     WEBHOOK_FORWARD_QUEUE,
     async (job) => {
       await postWebhookToCrm(config, job.data.instanceId, job.data.payload);
+      if (job.data.payload && typeof job.data.payload === "object" && "event" in job.data.payload) {
+        if (!services) throw Error("WaAPI ingress services unavailable");
+        await ingestWaApiPayload(job.data.instanceId, waApiWebhookSchema.parse(job.data.payload), services);
+      }
     },
     { connection, concurrency: 10 },
   );
 
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job) => {
     const final = job && job.attemptsMade >= (job.opts.attempts ?? 1);
     const log = final ? logger.error.bind(logger) : logger.warn.bind(logger);
     log(
-      { jobId: job?.id, instanceId: job?.data?.instanceId, err: error.message, final },
+      { jobId: job?.id, instanceId: job?.data?.instanceId, final },
       "webhook.forward.failed",
     );
   });
-  worker.on("error", (error) => {
-    logger.error({ err: error.message }, "webhook.forward.worker.error");
+  worker.on("error", () => {
+    logger.error("webhook.forward.worker.error");
   });
 
   return worker;

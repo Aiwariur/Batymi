@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   logger.info({ nodeEnv: config.nodeEnv }, "Application starting");
   const instanceRegistry = config.instanceSource === "crm" ? new CrmInstanceRegistry(config) : undefined;
   await instanceRegistry?.refresh(true);
-  logger.info({ instances: config.instances.length }, "GreenAPI instances loaded");
+  logger.info({ instances: config.instances.length }, "WhatsApp instances loaded");
   if (config.mockExternals) {
     logger.warn("MOCK_EXTERNALS enabled - external services are mocked");
   }
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
       runtime.workerStarted = false;
     });
     if (!config.mockCrm) {
-      webhookWorker = createWebhookProxyWorker(config, logger, queueRedis);
+      webhookWorker = createWebhookProxyWorker(config, logger, queueRedis, services);
     }
     logger.info({ concurrency: config.workerConcurrency }, "BullMQ worker started");
   }

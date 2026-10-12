@@ -1,6 +1,7 @@
-import Fastify, { FastifyBaseLogger, FastifyInstance } from "fastify";
+import Fastify, { FastifyBaseLogger, FastifyInstance, LogController } from "fastify";
 import { Services } from "./services";
 import { registerGreenApiRoutes } from "./webhooks/greenapi.routes";
+import { registerWaApiRoutes } from "./webhooks/waapi.routes";
 import { RecoverySummary } from "./queue/conversation-recovery";
 
 export interface RuntimeState {
@@ -13,7 +14,10 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
   const app = Fastify({
     loggerInstance: services.logger as unknown as FastifyBaseLogger,
     bodyLimit: 5 * 1024 * 1024,
+    // Fastify's default access log includes the URL; WaAPI keeps a secret in it.
+    logController: new LogController({ disableRequestLogging: true }),
   });
+  app.setNotFoundHandler((_request, reply) => reply.code(404).send({ ok: false, error: "route not found" }));
 
   app.get("/health/live", async () => ({ ok: true }));
 
@@ -21,14 +25,18 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
     const config = services.config;
     const missing: string[] = [];
 
-    if (config.instances.length === 0) missing.push("GREENAPI instances");
+    if (config.instances.length === 0) missing.push("WhatsApp instances");
     if (!config.mockCrm) {
       if (!config.crmBaseUrl) missing.push("CRM_BASE_URL");
       if (!config.crmApiKey) missing.push("CRM_API_KEY");
     }
     if (!config.mockLlm && !config.llmApiKey) missing.push("LLM_API_KEY");
-    if ((config.isProduction || !config.mockGreenApi) && !config.webhookSecret) {
+    if (config.instances.some(i => i.provider !== "waapi") && (config.isProduction || !config.mockGreenApi) && !config.webhookSecret) {
       missing.push("GREENAPI_WEBHOOK_SECRET");
+    }
+    if (config.instances.some(i => i.provider === "waapi")) {
+      if (config.instances.some(i => i.provider === "waapi" && !i.webhookSecret)) missing.push("WaAPI line secret");
+      if (!config.mockCrm && !config.waapiApiToken) missing.push("WAAPI_API_TOKEN");
     }
 
     const redis = runtime.redisConnected ? "ok" : "error";
@@ -50,6 +58,7 @@ export function buildApp(services: Services, runtime: RuntimeState): FastifyInst
   });
 
   registerGreenApiRoutes(app, services);
+  registerWaApiRoutes(app, services);
 
   return app;
 }

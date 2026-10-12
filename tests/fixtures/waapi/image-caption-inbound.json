@@ -1,0 +1,18 @@
+{
+  "event": "message",
+  "instanceId": "105907",
+  "data": {
+    "message": {
+      "id": {"id": "image-in-1", "remote": "12025550123@c.us", "fromMe": false, "_serialized": "false_12025550123@c.us_image-in-1"},
+      "fromMe": false,
+      "body": "Fixture",
+      "type": "image",
+      "timestamp": 1791686401,
+      "from": "12025550123@c.us",
+      "to": "19995550100@c.us",
+      "ack": 0,
+      "hasMedia": true
+    },
+    "media": {"mimetype": "image/jpeg", "data": "", "filesize": 0, "filename": "fixture.jpg"}
+  }
+}

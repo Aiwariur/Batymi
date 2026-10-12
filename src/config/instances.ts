@@ -5,6 +5,9 @@ export interface InstanceConfig {
   token: string;
   managerId?: number;
   name?: string;
+  provider?: "greenapi" | "waapi";
+  webhookSecret?: string;
+  baseUrl?: string;
 }
 
 const instanceSchema = z.object({
@@ -63,12 +66,14 @@ function buildMockInstances(): InstanceConfig[] {
 }
 
 export function parseInstances(env: NodeJS.ProcessEnv, mockExternals: boolean): InstanceConfig[] {
+  const waapi: InstanceConfig[] = env.WAAPI_INSTANCE_ID?.trim() ? [{ id: env.WAAPI_INSTANCE_ID.trim(), token: "", provider: "waapi",
+    webhookSecret: env.WAAPI_WEBHOOK_SECRET?.trim(), baseUrl: env.WAAPI_BASE_URL?.replace(/\/+$/, "") }] : [];
   const json = parseJsonInstances(env.GREENAPI_INSTANCES);
   const numbered = parseNumberedInstances(env);
 
   const seen = new Set<string>();
   const merged: InstanceConfig[] = [];
-  for (const instance of [...json, ...numbered]) {
+  for (const instance of [...waapi, ...json, ...numbered]) {
     if (seen.has(instance.id)) continue;
     seen.add(instance.id);
     merged.push(instance);

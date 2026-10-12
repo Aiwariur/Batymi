@@ -1,4 +1,4 @@
-import pino, { Logger } from "pino";
+import pino, { Logger, DestinationStream } from "pino";
 
 export type { Logger };
 
@@ -16,7 +16,7 @@ function hasPinoPretty(): boolean {
   }
 }
 
-export function createLogger(options: LoggerOptions): Logger {
+export function createLogger(options: LoggerOptions, destination?: DestinationStream): Logger {
   const usePretty = options.pretty && hasPinoPretty();
   return pino({
     level: options.level,
@@ -39,6 +39,10 @@ export function createLogger(options: LoggerOptions): Logger {
         // spelling.
         "req.headers.*",
         "headers.*",
+        "req.url",
+        "req.originalUrl",
+        "*.webhookSecret",
+        "webhookSecret",
       ],
       censor: "[redacted]",
     },
@@ -52,5 +56,5 @@ export function createLogger(options: LoggerOptions): Logger {
           },
         }
       : undefined,
-  });
+  }, destination);
 }
