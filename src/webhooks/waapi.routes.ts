@@ -14,6 +14,11 @@ function safeMessageType(body: unknown): string {
     ? type : "unknown";
 }
 
+function safeMessageBodyKind(body: unknown): string {
+  const value = (body as { data?: { message?: { body?: unknown } } } | null)?.data?.message?.body;
+  return value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+}
+
 function audioRejectionReason(error: AudioInputError): string {
   if (error.message === "invalid audio base64") return "invalid_audio_base64";
   if (error.message === "unsupported audio MIME") return "unsupported_audio_mime";
@@ -49,6 +54,7 @@ export function registerWaApiRoutes(app: FastifyInstance, services: Services): v
     const parsed = waApiWebhookSchema.safeParse(request.body);
     if (!parsed.success || parsed.data.instanceId !== instanceId) {
       services.logger.warn({ instanceId, messageType: safeMessageType(request.body),
+        messageBodyKind: safeMessageBodyKind(request.body),
         reason: parsed.success ? "instance_mismatch" : "schema_rejected",
         ...(!parsed.success ? { issues: parsed.error.issues.map(issue => ({ code: issue.code, path: issue.path })) } : {}),
       }, "waapi.webhook.rejected");

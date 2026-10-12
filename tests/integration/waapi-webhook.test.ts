@@ -128,6 +128,59 @@ describe("WaAPI transport", () => {
       }
     } finally { await app.close(); }
   });
+  it("accepts a null message body on inbound PTT and buffers its inline audio", async () => {
+    const h = createHarness({ WAAPI_INSTANCE_ID: "105907", WAAPI_WEBHOOK_SECRET: "line-secret" });
+    h.config.waapiApiToken = "test-account-token";
+    const app = buildApp(h.services, { redisConnected: true, workerStarted: true });
+    const lid = "207528843575485@lid";
+    const chatId = "380635622252@c.us";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: "success",
+      data: { status: "success", data: { contacts: [{ lid, pn: chatId }] } } }) }));
+    const payload = {
+      event: "message", instanceId: 105907,
+      data: {
+        message: { id: { _serialized: "false_207528843575485@lid_3A41248BCF5E2122AFDB" },
+          fromMe: false, from: lid, type: "ptt", body: null, timestamp: 1791816902 },
+        media: { data: "AA==", mimetype: "audio/ogg" },
+      },
+    };
+    try {
+      expect((await app.inject({ method: "POST", url: "/webhooks/waapi/105907/line-secret", payload })).statusCode).toBe(200);
+      expect(h.scheduler.jobs).toHaveLength(1);
+      expect(h.scheduler.jobs[0].conversationKey).toBe(`105907:${chatId}`);
+      await expect(h.store.getPendingMessages(`105907:${chatId}`)).resolves.toEqual([
+        expect.objectContaining({ type: "audio", audio: { data: "AA==", mimetype: "audio/ogg" } }),
+      ]);
+    } finally { await app.close(); }
+  });
+  it.each([987654, { private_text: "BODY_PRIVATE_MARKER" }])(
+    "rejects non-string message body %j before queue side effects and keeps diagnostics content-free",
+    async body => {
+      const h = createHarness({ WAAPI_INSTANCE_ID: "105907", WAAPI_WEBHOOK_SECRET: "line-secret" });
+      const lines: string[] = [];
+      h.services.logger = createLogger({ level: "trace", pretty: false }, { write: line => { lines.push(line); } });
+      const app = buildApp(h.services, { redisConnected: true, workerStarted: true });
+      const payload = {
+        ...fixture("message", "false_nullable-body"),
+        data: { message: { ...fixture().data.message, type: "ptt", body },
+          media: { data: "BASE64_PRIVATE_MARKER", mimetype: "audio/ogg" } },
+      };
+      try {
+        expect((await app.inject({ method: "POST", url: "/webhooks/waapi/105907/line-secret", payload })).statusCode).toBe(400);
+        expect(h.scheduler.jobs).toHaveLength(0);
+        expect(h.debug.snapshot().forwardedWebhooks).toHaveLength(0);
+        expect(await h.store.pendingCount(`105907:${pn}`)).toBe(0);
+        const records = lines.map(line => JSON.parse(line));
+        const diagnostic = records.find(record => record.reason === "schema_rejected");
+        expect(diagnostic?.issues).toContainEqual(expect.objectContaining({ code: "invalid_type",
+          path: ["data", "message", "body"] }));
+        const logs = lines.join("");
+        for (const privateValue of ["line-secret", "BODY_PRIVATE_MARKER", "BASE64_PRIVATE_MARKER"]) {
+          expect(logs).not.toContain(privateValue);
+        }
+      } finally { await app.close(); }
+    },
+  );
   it("buffers only inbound message, retains literal ID and deduplicates duplicates", async () => {
     const { h, app, post } = setup();
     try {
