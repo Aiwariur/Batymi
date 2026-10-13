@@ -331,7 +331,7 @@ export async function handleConversationJob(
       }
       if (!checkpoint) {
         stage = "cooperation.llm";
-        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name, crmBaseUrl: services.config.crmBaseUrl,
+        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name, agencyName: services.config.agencyName, crmBaseUrl: services.config.crmBaseUrl,
           onRaw: raw => runTrace.record(runId, "cooperation.model", { raw }) });
         checkpoint = {
           mode: "cooperation_only", plannerVersion: COOPERATION_PLANNER_VERSION, manualHandoffReason: result.handoffReason,

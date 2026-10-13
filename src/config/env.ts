@@ -52,6 +52,8 @@ const envSchema = z.object({
   LLM_TOP_P: z.coerce.number().min(0).max(1).default(0.9),
   TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
   OWNER_DIALOGUE_MODE: z.enum(["full", "cooperation_only"]).default("full"),
+  /** Название агентства в промпте owner-dialogue (представитель линии — из конфига инстансов). */
+  AGENCY_NAME: z.string().default("Batumi Key"),
 
   // Фильтр «диалоги нашего агента»: основной режим — флаг assigned_manager_is_ai
   // от CRM (менеджер с Manager.is_ai, назначается при первой отправке).
@@ -104,6 +106,7 @@ export interface Config {
   llmTopP: number;
   transcriptionModel: string;
   ownerDialogueMode: "full" | "cooperation_only";
+  agencyName: string;
 
   instances: InstanceConfig[];
   instanceSource: "env" | "crm";
@@ -188,6 +191,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     llmTopP: e.LLM_TOP_P,
     transcriptionModel: e.TRANSCRIPTION_MODEL,
     ownerDialogueMode: e.OWNER_DIALOGUE_MODE,
+    agencyName: e.AGENCY_NAME,
 
     instances,
     instanceSource: e.GREENAPI_INSTANCE_SOURCE,

@@ -17,32 +17,78 @@ function setup() {
   ]);
   return { h, instanceId, phone, message: (text: string) => h.makeMessage({ instanceId, chatId: phone.slice(1) + "@c.us", text }) };
 }
-const decision = (intent: string, evidence?: string, language = "ru", extra: Record<string, unknown> = {}) => JSON.stringify({
-  intent, language, ...(evidence ? { evidence } : {}), ...extra,
-});
 
-describe("LLM cooperation handoff execution", () => {
-  it("renders an owner clarification from a semantic classification", async () => {
+// Новый JSON-контракт owner-dialogue: модель одной строкой возвращает решение,
+// сервис маппит его в отправку/молчание/handoff/стоп.
+type OwnerAction = "reply" | "silence" | "handoff" | "stop";
+const decision = (action: OwnerAction, reply: string, opts: {
+  language?: "ru" | "en" | "ka";
+  crmStatus?: "agreed" | "disagreed" | "listing_removed" | "realtor" | null;
+  reason?: string;
+} = {}) => JSON.stringify({
+  action, reply,
+  language: opts.language ?? "ru",
+  crm_status: opts.crmStatus ?? null,
+  reason: opts.reason ?? "решение по последней реплике собственника",
+});
+const HANDOFF_PREFIX = "owner_dialogue: ";
+
+// Скриптуемые реплики обязаны проходить гварды ядра: ≤350 символов, не повторять
+// уже отправленные тексты (включая COOPERATION_QUESTION и outreach), кириллица
+// для ru, латиница для en, без выдуманных клиентов.
+const REPLY_APARTMENT = "Добрый день! Пишу о квартире на Лермонтова 31. Подскажите, она ещё сдаётся? Мы помогаем собственникам найти жильцов в долгосрочную аренду.";
+const REPLY_INTRO = "Меня зовут Александр, я менеджер агентства Batumi Key. Подскажите, пожалуйста, квартира ещё сдаётся?";
+const REPLY_AUDIO = "Здравствуйте! Да, речь о квартире на Лермонтова 31. Она ещё сдаётся? Если да, расскажу подробнее про долгосрочную аренду.";
+const REPLY_TWO_AUDIOS = "Спасибо за голосовые! Уточните, пожалуйста: квартира на Лермонтова 31 ещё сдаётся?";
+const REPLY_TRANSLIT = "Речь о квартире на Лермонтова 31. Она ещё сдаётся? Если удобно, продолжим на русском.";
+const REPLY_MARKER = "Пишу насчёт квартиры на Лермонтова 31 — она ещё актуальна для сдачи?";
+const REPLY_QUOTED = "Речь о квартире на Лермонтова 31. Актуальна ли ещё сдача? Мы ищем собственников для долгосрочного сотрудничества.";
+const REPLY_RENTAL_TERM = "Понимаю, квартиру можно снять до октября. Скажите, сотрудничество с агентством при сдаче вам интересно?";
+const REPLY_SERVICE_EN = "We help owners rent out apartments long-term. Would you be open to cooperating with our agency on this apartment?";
+const REPLY_TAKEOVER_RECHECK = "Речь о квартире на Лермонтова 31, подскажите, она ещё сдаётся?";
+const REPLY_UNCERTAIN_SEND = "Уточните, пожалуйста, квартира на Лермонтова 31 ещё сдаётся?";
+
+describe("LLM cooperation owner-dialogue execution", () => {
+  it("sends the model reply verbatim and keeps the dialogue open", async () => {
     const { h, message } = setup();
-    const reply = "Пишу по этой квартире: https://example.com/flat/102 (Лермонтова 31)\n\nГотовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?";
-    h.llm.responder = () => decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+    h.llm.responder = messages => {
+      expect(messages).toHaveLength(2);
+      expect(messages[0].content).toContain("Лермонтова 31");
+      expect(messages[0].content).not.toContain("Кобаладзе 12");
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Какая именно квартира?")).toBe(true);
+      return decision("reply", REPLY_APARTMENT, { reason: "уточняет, о какой квартире речь" });
+    };
     await h.ingest(message("Какая именно квартира?"));
-    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "processed", reply });
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "processed", reply: REPLY_APARTMENT, stopConversation: false });
     expect(h.llm.calls).toHaveLength(1);
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_APARTMENT]);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
+  it("keeps the dialogue open on a silence decision", async () => {
+    const { h, message } = setup();
+    h.llm.responder = messages => {
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Спасибо, понятно")).toBe(true);
+      return decision("silence", "", { reason: "вежливая благодарность без нового вопроса" });
+    };
+    await h.ingest(message("Спасибо, понятно"));
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "processed", reply: "", stopConversation: false });
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    await h.ingest(message("Какая квартира?"));
+    await h.scheduler.runAll();
+    expect(h.llm.calls).toHaveLength(2);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it.each([
-    ["identity", "Are you ai?", "handoff_identity"],
-    ["terms", "Да, но без комиссии", "handoff_terms"],
-  ])("silences %s handoff and future messages without changing CRM status", async (reason, text, intent) => {
+    ["identity", "Are you ai?", "спрашивает, человек ли с ним общается", "en"],
+    ["terms", "Да, но без комиссии", "хочет обсудить комиссию напрямую", "ru"],
+  ] as const)("silences the %s handoff and future messages without changing CRM status", async (kind, text, reason, language) => {
     const { h, instanceId, phone, message } = setup();
     const key = h.key(instanceId, phone.slice(1) + "@c.us");
-    h.llm.responder = () => decision(intent, undefined, reason === "identity" ? "en" : "ru");
+    h.llm.responder = () => decision("handoff", "", { language, reason });
     await h.ingest(message(text));
     const first = (await h.scheduler.runAll())[0];
     expect(first).toMatchObject({ status: "processed", reply: "", stopConversation: true });
-    expect(await h.store.getManualHandoff(key)).toBe(reason);
+    expect(await h.store.getManualHandoff(key)).toBe(HANDOFF_PREFIX + reason);
     expect(await h.store.getActiveBatch(key)).toBeNull();
     await h.ingest(message("Какая квартира?"));
     expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "skipped", stopConversation: true });
@@ -53,47 +99,49 @@ describe("LLM cooperation handoff execution", () => {
     expect((await h.store.getHistory(key, 20)).map(row => row.content)).toContain("Какая квартира?");
     expect(await h.store.pendingCount(key)).toBe(0);
   });
-  it("uses the receiving line's representative name for a normal introduction", async () => {
-    const { h, instanceId, message } = setup();
+  it("passes the receiving line's representative name into the dialogue prompt", async () => {
+    const { h, message } = setup();
     h.config.instances[0].name = "Александр";
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("Кто мне пишет?");
-      return decision("identify", undefined, "ru");
+      expect(messages[0].content).toContain("Александр");
+      expect(messages[0].content).toContain("Batumi Key");
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Кто мне пишет?")).toBe(true);
+      return decision("reply", REPLY_INTRO, { reason: "представляется и уточняет актуальность" });
     };
     await h.ingest(message("Кто мне пишет?"));
     await h.scheduler.runAll();
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual(["Александр, агентство долгосрочной аренды."]);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_INTRO]);
   });
   it("recovers a saved handoff without asking the model again after a storage failure", async () => {
     const { h, instanceId, phone, message } = setup();
     const key = h.key(instanceId, phone.slice(1) + "@c.us");
-    h.llm.responder = () => decision("handoff_identity", undefined, "en");
+    const reason = "считает собеседника ботом";
+    h.llm.responder = () => decision("handoff", "", { language: "ru", reason });
     const handoff = h.store.handoffToManager.bind(h.store);
     const failOnce = vi.spyOn(h.store, "handoffToManager").mockRejectedValueOnce(Error("Redis temporarily unavailable"))
       .mockImplementation(handoff);
-    await h.ingest(message("Are you ai?"));
+    await h.ingest(message("Это бот мне пишет?"));
     await h.scheduler.runAll();
     expect(failOnce).toHaveBeenCalledTimes(2);
     expect(h.llm.calls).toHaveLength(1);
-    expect(await h.store.getManualHandoff(key)).toBe("identity");
+    expect(await h.store.getManualHandoff(key)).toBe(HANDOFF_PREFIX + reason);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it.each([false, true])("transcribes cooperation audio and preserves accompanying text (mixed=%s)", async mixed => {
     const { h, message } = setup();
     const fileUrl = "https://greenapi.example/owner.ogg";
     const transcribe = vi.spyOn(h.services.transcription, "transcribe").mockResolvedValue("Какая квартира вас интересует?");
-    const reply = "Пишу по этой квартире: https://example.com/flat/102 (Лермонтова 31)\n\nГотовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?";
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe(mixed
-        ? "Здравствуйте\nКакая квартира вас интересует?" : "Какая квартира вас интересует?");
-      return decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] " + (mixed
+        ? "Здравствуйте\nКакая квартира вас интересует?" : "Какая квартира вас интересует?"))).toBe(true);
+      return decision("reply", REPLY_AUDIO, { reason: "уточняет актуальность квартиры" });
     };
     if (mixed) await h.ingest(message("Здравствуйте"));
     await h.ingest({ ...message(""), type: "audio", rawType: "audioMessage", text: undefined, fileUrl });
     await h.scheduler.runAll();
     expect(transcribe).toHaveBeenCalledWith(fileUrl);
     expect(h.llm.calls).toHaveLength(1);
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_AUDIO]);
   });
   it("stores separate transcripts for multiple audio messages in one batch", async () => {
     const { h, instanceId, phone, message } = setup();
@@ -101,8 +149,8 @@ describe("LLM cooperation handoff execution", () => {
       .mockResolvedValueOnce("Первая расшифровка")
       .mockResolvedValueOnce("Вторая расшифровка");
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("Первая расшифровка\nВторая расшифровка");
-      return decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Первая расшифровка\nВторая расшифровка")).toBe(true);
+      return decision("reply", REPLY_TWO_AUDIOS, { reason: "просит подтвердить актуальность" });
     };
     for (const [id, file] of [["audio-1", "one.ogg"], ["audio-2", "two.ogg"]]) {
       await h.ingest({ ...message(""), idMessage: id, type: "audio", rawType: "audioMessage", text: undefined, fileUrl: `https://greenapi.example/${file}` });
@@ -113,34 +161,36 @@ describe("LLM cooperation handoff execution", () => {
       .toEqual([["audio-1", "Первая расшифровка"], ["audio-2", "Вторая расшифровка"]]);
   });
   it("applies consent from an audio transcript silently", async () => {
-    const { h, phone, message } = setup();
+    const { h, instanceId, phone, message } = setup();
+    const key = h.key(instanceId, `${phone.slice(1)}@c.us`);
+    const reason = "в голосовом явно согласен сотрудничать";
     vi.spyOn(h.services.transcription, "transcribe").mockResolvedValue("Да, квартира актуальна, согласен сотрудничать");
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toContain("согласен сотрудничать");
-      return decision("consent", "Да, квартира актуальна, согласен сотрудничать", "ru", { selectedListingId: 102 });
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Да, квартира актуальна, согласен сотрудничать")).toBe(true);
+      return decision("handoff", "", { crmStatus: "agreed", reason });
     };
     await h.ingest({ ...message(""), type: "audio", rawType: "audioMessage", text: undefined, fileUrl: "https://greenapi.example/yes.ogg" });
     await h.scheduler.runAll();
     expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "agreed")).toBe(true);
+    expect(await h.store.getManualHandoff(key)).toBe(HANDOFF_PREFIX + reason);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it("treats consent with a rental-period fact as consent", async () => {
-    const { h, phone, message } = setup();
+    const { h, phone, instanceId, message } = setup();
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
-    const answer = "Да, готов сотрудничать, но квартиру сдаю только до мая";
-    h.llm.responder = () => decision("consent", answer, "ru", { selectedListingId: 102 });
-    await h.ingest(message(answer));
+    const reason = "готов сотрудничать, срок описывает квартиру";
+    h.llm.responder = () => decision("handoff", "", { crmStatus: "agreed", reason });
+    await h.ingest(message("Да, готов сотрудничать, но квартиру сдаю только до мая"));
     await h.scheduler.runAll();
     expect(setStatus).toHaveBeenCalledWith(102, "agreed", { suppressTelegram: true, cooperationOnly: true });
-    expect(await h.store.getManualHandoff(h.key(h.config.instances[0].id, "995555700090@c.us"))).toBeNull();
+    expect(await h.store.getManualHandoff(h.key(instanceId, "995555700090@c.us"))).toBe(HANDOFF_PREFIX + reason);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it("does not report consent when CRM did not apply the status", async () => {
     const { h, phone, instanceId, message } = setup();
     const setStatus = vi.spyOn(h.services.crm, "setStatus").mockResolvedValue({ applied: false, status: "new" } as never);
-    const answer = "Да, готов сотрудничать";
-    h.llm.responder = () => decision("consent", answer, "ru", { selectedListingId: 102 });
-    await h.ingest(message(answer));
+    h.llm.responder = () => decision("handoff", "", { crmStatus: "agreed", reason: "явно подтвердил сотрудничество" });
+    await h.ingest(message("Да, готов сотрудничать"));
 
     const result = (await h.scheduler.runAll())[0];
     const key = h.key(instanceId, `${phone.slice(1)}@c.us`);
@@ -153,15 +203,35 @@ describe("LLM cooperation handoff execution", () => {
     expect(h.llm.calls).toHaveLength(1);
   });
   it.each([
-    ["agreed", "Да, готов сотрудничать"],
-    ["disagreed", "Нет, сотрудничать не готов"],
-  ] as const)("uses quoted owner reply text for %s and stops after the terminal decision", async (status, answer) => {
+    ["agreed", "handoff", "Да, готов сотрудничать с вами"],
+    ["disagreed", "stop", "Нет, сотрудничать не готов"],
+    ["listing_removed", "stop", "Квартира уже сдана"],
+  ] as const)("executes %s silently with crm_status and stops future replies", async (status, action, incoming) => {
+    const { h, phone, message } = setup();
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const reason = status === "agreed" ? "подтвердил сотрудничество по квартире"
+      : status === "disagreed" ? "прямо отказался от сотрудничества с агентством"
+      : "квартира уже сдана другому жильцу";
+    h.llm.responder = () => decision(action, "", { crmStatus: status, reason });
+    await h.ingest(message(incoming));
+    await h.scheduler.runAll();
+    expect(setStatus).toHaveBeenCalledWith(102, status, { suppressTelegram: true, cooperationOnly: true });
+    expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === status)).toBe(true);
+    await h.ingest(message("Какая квартира?"));
+    const followUp = (await h.scheduler.runAll())[0];
+    expect(followUp?.status).toBe(action === "handoff" ? "skipped" : "terminal");
+    if (action === "handoff") expect(followUp?.stopConversation).toBe(true);
+    expect(h.llm.calls).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
+  it("uses the quoted owner reply text for the follow-up decision and stops after the terminal decision", async () => {
     const { h, instanceId, phone, message } = setup();
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const status = "agreed" as const;
     const clarification = "Какой адрес квартиры?";
     const quoted = normalizeGreenApiWebhook(instanceId, {
       typeWebhook: "incomingMessageReceived",
-      idMessage: `quoted-${status}`,
+      idMessage: "quoted-agreed",
       senderData: { chatId: phone.slice(1) + "@c.us" },
       messageData: {
         typeMessage: "quotedMessage",
@@ -170,23 +240,23 @@ describe("LLM cooperation handoff execution", () => {
       },
     } as GreenApiWebhookPayload);
     expect(quoted).toMatchObject({ type: "text", text: clarification, rawType: "quotedMessage" });
+    const answer = "Да, готов сотрудничать";
 
     h.llm.responder = messages => {
-      const lastUser = messages.filter(row => row.role === "user").at(-1)?.content;
-      if (lastUser === clarification) {
-        expect(lastUser).not.toContain(COOPERATION_QUESTION);
-        return decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+      const lastUser = messages.at(-1)?.content ?? "";
+      if (lastUser.endsWith("[Собственник] " + clarification)) {
+        expect(lastUser).toContain(COOPERATION_QUESTION);
+        return decision("reply", REPLY_QUOTED, { reason: "называет адрес исходной квартиры" });
       }
-      expect(lastUser).toBe(answer);
+      expect(lastUser.endsWith("[Собственник] " + answer)).toBe(true);
+      expect(lastUser).toContain(REPLY_QUOTED);
       expect(messages.some(row => row.content.includes("original-cooperation-question"))).toBe(false);
       expect(messages.some(row => row.content.includes(COOPERATION_QUESTION))).toBe(true);
-      return decision(status === "agreed" ? "consent" : "refusal", answer, "ru", { selectedListingId: 102 });
+      return decision("handoff", "", { crmStatus: status, reason: "подтвердил сотрудничество по квартире" });
     };
     await h.ingest(quoted!);
     await h.scheduler.runAll();
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([
-      "Пишу по этой квартире: https://example.com/flat/102 (Лермонтова 31)\n\nГотовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?",
-    ]);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_QUOTED]);
 
     await h.ingest(message(answer));
     await h.scheduler.runAll();
@@ -196,64 +266,45 @@ describe("LLM cooperation handoff execution", () => {
     expect(h.debug.snapshot().outgoing.map(row => row.message)).toHaveLength(1);
 
     await h.ingest(message("Продолжим разговор?"));
-    expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "skipped", stopConversation: true });
     expect(h.llm.calls).toHaveLength(2);
     expect(h.debug.snapshot().outgoing.map(row => row.message)).toHaveLength(1);
     expect(setStatus).toHaveBeenCalledTimes(1);
   });
-  it("sends the model's apartment answer for the actual transliterated message without a dictionary", async () => {
+  it("passes a transliterated question through and answers in Russian Cyrillic", async () => {
     const { h, message } = setup();
-    const reply = "Pishu po etoy kvartire: https://example.com/flat/102 (Лермонтова 31)\n\nGotovy sotrudnichat s nashim agentstvom po sdache etoy kvartiry v dolgosrochnuyu arendu?";
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("Kakaia kvartira vas interesuit");
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Kakaia kvartira vas interesuit")).toBe(true);
       expect(messages[0].content).toContain("Лермонтова 31");
-      return decision("clarify_listing", undefined, "ru_latn", { selectedListingId: 102 });
+      return decision("reply", REPLY_TRANSLIT, { reason: "перешёл на кириллицу после транслита" });
     };
     await h.ingest(message("Kakaia kvartira vas interesuit"));
     await h.scheduler.runAll();
     expect(h.llm.calls).toHaveLength(1);
-    expect(h.debug.snapshot().outgoing[0].message).toBe(reply);
+    expect(h.debug.snapshot().outgoing[0].message).toBe(REPLY_TRANSLIT);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
-  it("uses a multi-listing outreach marker as the authoritative target", async () => {
+  it("builds the dialogue prompt around the apartment from the outreach marker", async () => {
     const { h, instanceId, message } = setup();
     vi.mocked(h.services.crm.getInteractions).mockResolvedValue([{
       id: 7, direction: "outgoing", sender: "phone", instance_id: instanceId,
       sent_at: "2026-10-09T07:41:35Z", text: "Исходное обращение", notes: "cooperation_outreach:v1:102",
     }]);
     h.llm.responder = messages => {
-      expect(messages[0].content).toContain('"sourceListingId":"102"');
-      return decision("clarify_listing", undefined, "ru");
+      expect(messages[0].content).toContain("Лермонтова 31");
+      expect(messages[0].content).not.toContain("Кобаладзе 12");
+      return decision("reply", REPLY_MARKER, { reason: "уточняет актуальность исходной квартиры" });
     };
     await h.ingest(message("Какая квартира?"));
     await h.scheduler.runAll();
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([
-      "Пишу по этой квартире: https://example.com/flat/102 (Лермонтова 31)\n\nГотовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?",
-    ]);
-  });
-  it.each([
-    ["agreed", "consent", "Да, готов сотрудничать"],
-    ["disagreed", "refusal", "Нет, сотрудничать не готов"],
-    ["listing_removed", "unavailable", "Квартира уже сдана"],
-  ] as const)("executes %s decision silently and stops future replies", async (status, intent, evidence) => {
-    const { h, phone, message } = setup();
-    const setStatus = vi.spyOn(h.services.crm, "setStatus");
-    h.llm.responder = () => decision(intent, evidence, "ru", { selectedListingId: 102 });
-    await h.ingest(message(evidence));
-    await h.scheduler.runAll();
-    expect(setStatus).toHaveBeenCalledWith(102, status, { suppressTelegram: true, cooperationOnly: true });
-    expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === status)).toBe(true);
-    await h.ingest(message("Какая квартира?"));
-    expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
-    expect(h.llm.calls).toHaveLength(1);
-    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_MARKER]);
   });
   it("closes an already rented apartment as listing_removed, not refusal", async () => {
     const { h, message } = setup();
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("здравствуйте уже сдала");
-      return decision("unavailable", "уже сдала", "ru", { selectedListingId: 102 });
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] здравствуйте уже сдала")).toBe(true);
+      return decision("stop", "", { crmStatus: "listing_removed", reason: "квартира уже сдана собственницей" });
     };
     await h.ingest(message("здравствуйте уже сдала"));
     await h.scheduler.runAll();
@@ -262,93 +313,92 @@ describe("LLM cooperation handoff execution", () => {
   });
   it("persists the model decision once across a lost CRM response", async () => {
     const { h, message } = setup();
-    h.llm.responder = () => decision("consent", "Согласие своими словами", "ru", { selectedListingId: 102 });
+    h.llm.responder = () => decision("handoff", "", { crmStatus: "agreed", reason: "согласие подтверждено своими словами" });
     const original = h.crm.setStatus.bind(h.crm);
     let attempts = 0;
     vi.spyOn(h.services.crm, "setStatus").mockImplementation(async (...args) => {
       await original(...args);
       if (++attempts === 1) throw Error("response lost after commit");
     });
-    await h.ingest(message("Согласие своими словами"));
+    await h.ingest(message("Согласна, давайте сотрудничать"));
     await h.scheduler.runAll();
     expect(attempts).toBe(2);
     expect(h.llm.calls).toHaveLength(1);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it("hands explicit commission conditions to a manager without forcing a CRM status", async () => {
-    const { h, message } = setup();
-    h.llm.responder = () => decision("handoff_terms", undefined, "ru");
+    const { h, instanceId, phone, message } = setup();
+    const key = h.key(instanceId, `${phone.slice(1)}@c.us`);
+    const reason = "обсуждает комиссию, требует сотрудника";
+    h.llm.responder = () => decision("handoff", "", { reason });
     await h.ingest(message("Да, но без комиссии"));
     const result = (await h.scheduler.runAll())[0];
     expect(result).toMatchObject({ status: "processed", reply: "", stopConversation: true });
+    expect(await h.store.getManualHandoff(key)).toBe(HANDOFF_PREFIX + reason);
     expect(h.llm.calls).toHaveLength(1);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
+    expect((await h.crm.getListingsByPhone(phone)).every(row => row.crm_status === "new")).toBe(true);
   });
-  it("answers a plain rental-duration statement with the apartment and cooperation question", async () => {
-    const { h, message } = setup();
-    const reply = "Пишу по этой квартире: https://example.com/flat/102 (Лермонтова 31)\n\nГотовы сотрудничать с нашим агентством по сдаче этой квартиры в долгосрочную аренду?";
+  it("answers a plain rental-duration statement and keeps the dialogue open", async () => {
+    const { h, instanceId, message } = setup();
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("Сдаю до октября");
-      return decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] Сдаю до октября")).toBe(true);
+      return decision("reply", REPLY_RENTAL_TERM, { reason: "отвечает по существу и спрашивает далее" });
     };
     await h.ingest(message("Сдаю до октября"));
     const result = (await h.scheduler.runAll())[0];
     expect(result).toMatchObject({ status: "processed", stopConversation: false });
-    expect(await h.store.getManualHandoff(h.key(h.config.instances[0].id, "995555700090@c.us"))).toBeNull();
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([reply]);
+    expect(await h.store.getManualHandoff(h.key(instanceId, "995555700090@c.us"))).toBeNull();
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_RENTAL_TERM]);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
-  it("renders a service explanation in the owner's language", async () => {
+  it("replies in English to an English question", async () => {
     const { h, message } = setup();
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("What are you offering?");
-      return decision("explain_service", undefined, "en");
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] What are you offering?")).toBe(true);
+      return decision("reply", REPLY_SERVICE_EN, { language: "en", reason: "объясняет предложение агентства" });
     };
     await h.ingest(message("What are you offering?"));
     await h.scheduler.runAll();
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([
-      "We offer help with renting out your apartment long-term. Are you willing to work with our agency to rent out this apartment long-term?",
-    ]);
+    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([REPLY_SERVICE_EN]);
   });
-  it("excludes a model-recognized Georgian realtor across all listings without selecting an apartment", async () => {
+  it("stops silently on a Georgian realtor across all listings", async () => {
     const { h, phone, message } = setup();
-    const farewell = "ჩვენ უშუალოდ მესაკუთრეებთან ვთანამშრომლობთ.";
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
     h.llm.responder = messages => {
-      expect(messages.at(-1)?.content).toBe("გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50");
-      return decision("realtor", "მეც აგენტი ვარ", "ka");
+      expect(messages.at(-1)?.content?.endsWith("[Собственник] გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50")).toBe(true);
+      return decision("stop", "", { language: "ka", crmStatus: "realtor", reason: "собеседник риелтор, предлагает раздел комиссии" });
     };
     await h.ingest(message("გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50"));
     await h.scheduler.runAll();
     expect(setStatus).toHaveBeenCalledWith(102, "realtor", { suppressTelegram: true, cooperationOnly: true });
     expect((await h.crm.getListingsByPhone(phone)).every(l => l.crm_status === "realtor")).toBe(true);
-    expect(h.debug.snapshot().outgoing.map(row => row.message)).toEqual([farewell]);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
     await h.ingest(message("Продолжим сотрудничество?"));
     expect((await h.scheduler.runAll())[0]?.status).toBe("terminal");
     expect(h.llm.calls).toHaveLength(1);
-    expect(h.debug.snapshot().outgoing).toHaveLength(1);
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
   it("does not exclude a Telegram partner", async () => {
     const { h, phone, message } = setup();
     h.crm.setContactState(phone, { contactType: "partner", listings: [{ id: 101 }, { id: 102 }] as never });
-    h.llm.responder = () => decision("realtor", "Я агент", "ru");
+    h.llm.responder = () => decision("stop", "", { crmStatus: "realtor", reason: "называет себя агентом по недвижимости" });
     await h.ingest(message("Я агент, давайте 50/50"));
     await h.scheduler.runAll();
     expect(h.llm.calls).toHaveLength(0);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
-  it.each(["qualified", "update_rental_terms", "unknown_listing", "invented_link", "historical_evidence"])("rejects model output %s without any writes or sends", async kind => {
+  it.each([
+    ["a legacy intent payload", JSON.stringify({ intent: "consent", language: "ru", evidence: "Готов сотрудничать с агентством", selectedListingId: 102, actions: [] })],
+    ["an unknown crm_status", JSON.stringify({ action: "stop", reply: "", language: "ru", crm_status: "qualified", reason: "квалифицированный передаётся менеджеру" })],
+  ])("rejects %s after three repair rounds without writes or sends", async (_kind, raw) => {
     const { h, message } = setup();
-    h.llm.responder = () => kind === "qualified" ? JSON.stringify({ intent: "consent", language: "ru", evidence: "Любой вопрос", selectedListingId: 102, actions: [] })
-      : kind === "update_rental_terms" ? JSON.stringify({ intent: "consent", language: "ru", evidence: "Любой вопрос", selectedListingId: 102, actions: [{ type: kind, data: { price: 500 } }] })
-      : kind === "unknown_listing" ? decision("consent", "Любой вопрос", "ru", { selectedListingId: 999 })
-      : kind === "historical_evidence" ? decision("consent", COOPERATION_QUESTION, "ru", { selectedListingId: 102 })
-      : JSON.stringify({ intent: "clarify_listing", language: "ru", selectedListingId: 102, reply: "Ссылка: https://invented.invalid/flat/102" });
+    h.llm.responder = () => raw;
     await h.ingest(message("Любой вопрос"));
     expect((await h.scheduler.runAll())[0]?.status).toBe("quarantined");
-    expect(h.llm.calls).toHaveLength(2);
+    expect(h.llm.calls).toHaveLength(3);
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
     expect(h.debug.snapshot().crmActions).toHaveLength(0);
   });
@@ -357,7 +407,7 @@ describe("LLM cooperation handoff execution", () => {
     const rows = await h.services.crm.getInteractions("", instanceId);
     vi.mocked(h.services.crm.getInteractions).mockResolvedValueOnce(rows).mockResolvedValue([...rows,
       { id: 2, direction: "outgoing", sender: "manager", instance_id: instanceId, text: "Отвечу вручную", sent_at: "2026-10-09T07:43:00Z" }]);
-    h.llm.responder = () => decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+    h.llm.responder = () => decision("reply", REPLY_TAKEOVER_RECHECK, { reason: "уточняет актуальность квартиры" });
     await h.ingest(message("Что за квартира?"));
     expect((await h.scheduler.runAll())[0]?.status).toBe("skipped");
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
@@ -394,7 +444,7 @@ describe("LLM cooperation handoff execution", () => {
   });
   it("quarantines an uncertain send without running the model or sender again", async () => {
     const { h, message } = setup();
-    h.llm.responder = () => decision("clarify_listing", undefined, "ru", { selectedListingId: 102 });
+    h.llm.responder = () => decision("reply", REPLY_UNCERTAIN_SEND, { reason: "уточняет статус квартиры" });
     const sender = vi.spyOn(h.services.sender, "sendMessage").mockRejectedValue(Error("timeout after acceptance"));
     await h.ingest(message("Квартира?"));
     await h.scheduler.runAll();

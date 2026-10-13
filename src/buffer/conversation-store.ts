@@ -21,8 +21,9 @@ export interface OutboundIntent {
 /** Durable progress for the currently claimed inbound batch. */
 export interface AgentCheckpoint {
   mode?: "cooperation_only";
-  plannerVersion?: "semantic_v1" | "semantic_v2" | "semantic_v3";
-  manualHandoffReason?: "identity" | "terms";
+  plannerVersion?: "semantic_v1" | "semantic_v2" | "semantic_v3" | "owner_dialogue_v1";
+  /** Свободная причина ручного захвата (например, «owner_dialogue: <решение модели>»). */
+  manualHandoffReason?: string;
   result: AgentResult;
   /** Number of accepted CRM actions that completed successfully, in order. */
   completedActions: number;
