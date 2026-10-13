@@ -20,6 +20,8 @@ export class LlmError extends Error {
 export interface CompletionOptions {
   maxTokens?: number;
   temperature?: number;
+  /** false → «простой» вызов чата: без response_format и sampling-penalties. */
+  jsonMode?: boolean;
 }
 
 export interface LlmProvider {
@@ -37,51 +39,69 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   async complete(messages: ChatMessage[], options: CompletionOptions = {}): Promise<string> {
     if (!this.config.llmApiKey) throw new LlmError("LLM_API_KEY is not configured", false);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const response = await fetch(`${this.config.llmBaseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.config.llmApiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.config.llmModel,
-          messages,
-          max_tokens: Math.min(this.config.llmMaxTokens, options.maxTokens ?? this.config.llmMaxTokens),
-          temperature: options.temperature ?? this.config.llmTemperature,
-          frequency_penalty: this.config.llmFrequencyPenalty,
-          top_p: this.config.llmTopP,
-          response_format: { type: "json_object" },
-        }),
-        signal: controller.signal,
-      });
+    // DeepSeek-класс (thinking-модели) в JSON-режиме официально может возвращать
+    // пустой контент (api-docs.deepseek.com/guides/json_mode), а reasoning-токены
+    // съедают max_tokens. jsonMode:false — вызов без response_format и penalties.
+    const jsonMode = options.jsonMode !== false;
+    // Пустой контент у thinking-моделей стохастичен; OpenRouter за него не
+    // списывает. Переспрашиваем на месте (как гонка owner-dialogue в llm.mjs),
+    // не поднимая ошибку до тяжёлого ретрая всей джобы очередью.
+    const EMPTY_RETRIES = 2;
+    for (let attempt = 0; ; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${this.config.llmBaseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.config.llmApiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.config.llmModel,
+            messages,
+            max_tokens: Math.min(this.config.llmMaxTokens, options.maxTokens ?? this.config.llmMaxTokens),
+            temperature: options.temperature ?? this.config.llmTemperature,
+            ...(jsonMode ? {
+              frequency_penalty: this.config.llmFrequencyPenalty,
+              top_p: this.config.llmTopP,
+              response_format: { type: "json_object" },
+            } : {}),
+          }),
+          signal: controller.signal,
+        });
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        let reservedCredits = false;
-        if (response.status === 402) {
-          try {
-            const detail = JSON.parse(body) as {error?: {message?: string}};
-            reservedCredits = typeof detail.error?.message === "string" && detail.error.message.includes("in-flight requests");
-          } catch { /* Ordinary payment failures remain operator-visible. */ }
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          let reservedCredits = false;
+          if (response.status === 402) {
+            try {
+              const detail = JSON.parse(body) as {error?: {message?: string}};
+              reservedCredits = typeof detail.error?.message === "string" && detail.error.message.includes("in-flight requests");
+            } catch { /* Ordinary payment failures remain operator-visible. */ }
+          }
+          const retryable = reservedCredits || response.status === 429 || response.status >= 500;
+          throw new LlmError(`LLM request failed: HTTP ${response.status}`, retryable, response.status);
         }
-        const retryable = reservedCredits || response.status === 429 || response.status >= 500;
-        throw new LlmError(`LLM request failed: HTTP ${response.status}`, retryable, response.status);
-      }
 
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new LlmError("LLM returned an empty response", true);
-      return content;
-    } catch (error) {
-      if (error instanceof LlmError) throw error;
-      throw new LlmError(`LLM request failed: ${(error as Error).message}`, true);
-    } finally {
-      clearTimeout(timer);
+        const data = (await response.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) {
+          if (attempt < EMPTY_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+            continue;
+          }
+          throw new LlmError("LLM returned an empty response", true);
+        }
+        return content;
+      } catch (error) {
+        if (error instanceof LlmError) throw error;
+        throw new LlmError(`LLM request failed: ${(error as Error).message}`, true);
+      } finally {
+        clearTimeout(timer);
+      }
     }
   }
 }

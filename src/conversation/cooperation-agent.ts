@@ -38,9 +38,20 @@ export async function planCooperation(llm: LlmProvider, input: {
   const sourceId = anchor?.notes?.slice("cooperation_outreach:v1:".length);
   const target = input.listings.find(row => String(row.id) === sourceId) ?? (!sourceId && input.listings.length === 1 ? input.listings[0] : undefined);
 
+  // Планировщик зовёт модель «простым» вызовом, как гонка owner-dialogue (26/26):
+  // JSON-режим провайдера у thinking-моделей (DeepSeek) официально даёт пустой
+  // контент, а 600 токенов ядра уходят на reasoning. Бюджет поднят до 2000.
+  const plannerLlm: LlmProvider = {
+    complete: (messages, options) => llm.complete(messages, {
+      ...options,
+      maxTokens: Math.max(options?.maxTokens ?? 0, 2000),
+      jsonMode: false,
+    }),
+  };
+
   let decision;
   try {
-    decision = await planOwnerReply(llm, {
+    decision = await planOwnerReply(plannerLlm, {
       agency: {
         name: input.agencyName?.trim() || "Batumi Key",
         representativeName: input.representativeName,

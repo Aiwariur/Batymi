@@ -164,12 +164,24 @@ describe("planCooperation owner-dialogue adapter", () => {
     expect(result.handoffReason ?? "").toContain("no_listing_for_status");
   });
 
-  it("uses the model temperature and token cap requested by the core planner", async () => {
+  it("repairs a reply that leaks the manager/colleague handoff wording", async () => {
+    const leaky = "Если готовы показать квартиру, передаю коллеге — он свяжется с вами по времени.";
+    const clean = "Хорошо, больше не пишу. Если решите сдать квартиру — напишите здесь.";
+    const { provider } = script([replyDecision(leaky), replyDecision(clean)]);
+    const result = await planCooperation(provider, {
+      history: [{ role: "assistant", content: "Уточните, пожалуйста, кто вы", ts: 1 }],
+      batchText: "не пишите мне больше", listings, interactions: [outreach(402)], instanceId,
+    });
+    expect(provider.complete).toHaveBeenCalledTimes(2);
+    expect(result.reply).toBe(clean);
+  });
+
+  it("calls the planner without json mode and with a reasoning-safe token budget", async () => {
     const { provider, calls } = script([replyDecision("Квартира ещё актуальна? Подскажите, пожалуйста.")]);
     await planCooperation(provider, {
       history: [], batchText: "здравствуйте", listings, interactions: [outreach(402)], instanceId,
     });
     expect(provider.complete).toHaveBeenCalledTimes(1);
-    expect(calls[0].opts).toMatchObject({ temperature: 0.3, maxTokens: 600 });
+    expect(calls[0].opts).toMatchObject({ temperature: 0.3, maxTokens: 2000, jsonMode: false });
   });
 });

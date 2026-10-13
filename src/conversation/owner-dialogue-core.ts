@@ -131,6 +131,12 @@ const FABRICATION_PATTERNS = [
 ];
 const FABRICATION_HINT = "запрещено утверждать, что у агентства есть конкретный клиент, или обещать личный приход/показ от себя или менеджера без договорённости";
 
+// Персона: бот сам менеджер. Упоминание «коллеги»/чужого менеджера/передачи
+// разговора или признание себя ИИ раскрывает автоматизацию — живые модели
+// нарушают это даже при прямом запрете в промпте, поэтому страхуем кодом.
+const LEAK_RE = /коллег|переда(ю|ё|е)м?\s[^\n]{0,25}(менеджер|коллег|специалист|оператор|человека?)|менеджер[а-я]*[^\n]{0,25}(свяжется|перезвонит|напишет|ответит)|живой менеджер|свяжется с вами|живой человек продолжит|(i'?m|i am)\s+(an?\s+)?(ai|bot|robot|assistant|chatbot)|я\s+—?\s*(робот|бот|ии|ассистент|автоответчик|программа|нейросеть)|искусственный интеллект/i;
+const LEAK_HINT = "в ответе упомянут чужой сотрудник, передача разговора или ИИ — ты сам менеджер и пишешь от себя; перепиши без «коллег», «менеджер свяжется» и признаний в том, что ты не человек";
+
 // Вопрос о коммерческих условиях — не согласие: agreed на таком ходе запрещён,
 // если в той же реплике человек не выразил согласие явно.
 const COMMISSION_QUESTION_RE = /коммис|комисс|комишн|условия|договор|процент|сколько\s+бер[её]те|что\s+бер[её]те|commission|კომისიო|პირობა/i;
@@ -158,6 +164,7 @@ function guardErrors(decision: OwnerReplyDecision, input: OwnerDialogueInput): s
   if (decision.reply && !input.facts?.knownClient) {
     for (const p of FABRICATION_PATTERNS) if (p.test(decision.reply)) { errors.push(FABRICATION_HINT); break; }
   }
+  if (decision.reply && LEAK_RE.test(decision.reply)) errors.push(LEAK_HINT);
   if (decision.action === "handoff" && decision.crmStatus === "agreed"
     && COMMISSION_QUESTION_RE.test(input.incoming) && !CONSENT_RE.test(input.incoming))
     errors.push("вопрос о комиссии/условиях — это вопрос, а не согласие сотрудничать: верни crm_status=null");
