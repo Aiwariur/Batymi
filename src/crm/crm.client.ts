@@ -17,6 +17,7 @@ import {
   listingsResponseSchema,
   rentalTermsResponseSchema,
   statusResponseSchema,
+  transcriptResponseSchema,
 } from "./crm.schemas";
 
 const REQUEST_TIMEOUT_MS = 15000;
@@ -58,6 +59,14 @@ export interface CrmClient {
     data: RentalTermsUpdate,
   ): Promise<void>;
   getComplexes(): Promise<ResidentialComplex[]>;
+  /** Расшифровка голосового: CRM показывает её в чате под плеером. */
+  pushTranscript(input: TranscriptInput): Promise<void>;
+}
+
+export interface TranscriptInput {
+  instanceId: string;
+  messageId: string;
+  text: string;
 }
 
 export interface StatusWriteResult {
@@ -274,6 +283,25 @@ export class RealCrmClient implements CrmClient {
     const parsed = rentalTermsResponseSchema.safeParse(json);
     if (!parsed.success) {
       throw new CrmError("CRM rental-terms response failed validation", status, false);
+    }
+  }
+
+  async pushTranscript(input: TranscriptInput): Promise<void> {
+    const url = `${this.base}/interactions/transcript`;
+    const body = {
+      instance_id: input.instanceId,
+      message_id: input.messageId,
+      text: input.text,
+    };
+    const { status, json } = await requestJson(
+      url,
+      { method: "POST", body: JSON.stringify(body) },
+      this.config.crmApiKey,
+    );
+    assertOk(status, json);
+    const parsed = transcriptResponseSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new CrmError("CRM transcript response failed validation", status, false);
     }
   }
 
@@ -507,6 +535,11 @@ export class MockCrmClient implements CrmClient {
       { id: 2, name: "Batumi Towers" },
       { id: 3, name: "Blue Ocean" },
     ];
+  }
+
+  async pushTranscript(input: { instanceId: string; messageId: string; text: string }): Promise<void> {
+    this.debug.recordCrmAction("push_transcript", input);
+    this.logger.debug({ messageId: input.messageId }, "crm.mock.pushTranscript");
   }
 }
 

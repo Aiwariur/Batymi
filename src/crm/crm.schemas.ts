@@ -129,6 +129,14 @@ export const statusResponseSchema = z
   })
   .passthrough();
 
+export const transcriptResponseSchema = z
+  .object({
+    ok: z.boolean().optional(),
+    success: z.boolean().optional(),
+    updated: z.boolean().optional(),
+  })
+  .passthrough();
+
 export const agentReviewResponseSchema = z.object({
   success: z.boolean(),
   applied: z.boolean(),

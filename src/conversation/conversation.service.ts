@@ -96,7 +96,7 @@ export function isTerminalListing(listing: Listing, terminalStatuses: string[]):
   return false;
 }
 
-async function resolveBatchText(
+export async function resolveBatchText(
   batch: NormalizedMessage[],
   services: Services,
 ): Promise<string> {
@@ -109,6 +109,20 @@ async function resolveBatchText(
       if (transcript) {
         message.text = transcript;
         parts.push(transcript);
+        // Транскрипт должен жить в CRM (чат рисует его под плеером), но сбой
+        // пуша не должен ронять обработку батча.
+        try {
+          await services.crm.pushTranscript({
+            instanceId: message.instanceId,
+            messageId: message.idMessage,
+            text: transcript,
+          });
+        } catch (error) {
+          services.logger.warn(
+            { messageId: message.idMessage, error: (error as Error).message },
+            "crm.pushTranscript.failed",
+          );
+        }
       }
     } else if ((message.type === "image" || message.type === "document") && message.text) {
       parts.push(message.text);

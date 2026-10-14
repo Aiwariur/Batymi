@@ -145,6 +145,7 @@ describe("executeActions", () => {
         { id: 1, name: "Orbi City" },
         { id: 2, name: "Batumi Towers" },
       ]),
+      pushTranscript: vi.fn(async () => undefined),
     };
   }
 

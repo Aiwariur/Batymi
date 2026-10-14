@@ -12,6 +12,7 @@ function stubCrm(listings: Listing[]): CrmClient {
     updateDealInfo: vi.fn(async () => undefined),
     updateRentalTerms: vi.fn(async () => undefined),
     getComplexes: vi.fn(async () => []),
+    pushTranscript: vi.fn(async () => undefined),
   };
 }
 
