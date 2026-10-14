@@ -28,6 +28,7 @@ export interface OwnerDialogueMessage {
 export interface OwnerDialogueInput {
   agency: OwnerDialogueAgency;
   listing?: OwnerDialogueListing;
+  contactListingCount?: number;
   facts: { knownClient: boolean };
   history: OwnerDialogueMessage[];
   incoming: string;
@@ -40,6 +41,7 @@ export interface OwnerReplyDecision {
   reply: string;
   language: "ru" | "en" | "ka";
   crmStatus: OwnerReplyCrmStatus;
+  listingScope: "source" | "other" | "unknown";
   reason: string;
 }
 
@@ -62,6 +64,7 @@ export function buildSystemPrompt(input: OwnerDialogueInput): string {
 
 ФАКТЫ, известные достоверно:
 ${facts.length ? facts.join("\n") : "- Объявление без адреса"}
+- Всего квартир контакта в CRM: ${input.contactListingCount ?? (l ? 1 : 0)}.
 - Конкретного клиента на эту квартиру сейчас ${client}.
 Больше ты ничего не знаешь. Запрещено выдумывать: клиентов, просмотры, звонки, договорённости, показы от лица менеджера, факты о квартире.
 
@@ -72,7 +75,7 @@ ${facts.length ? facts.join("\n") : "- Объявление без адреса"
 3. «Спасибо», эмодзи, завершённая реплика без вопроса — можно промолчать (action=silence).
 4. Явный отказ или «не пишите» → action=stop, crm_status="disagreed"; просьба не писать выполняется немедленно и навсегда. «Квартира уже сдана» → stop, "listing_removed". Собеседник — риелтор → stop, "realtor". Stop всегда молчаливый (reply=""): пометили в CRM и закрыли диалог, ничего не отправляем — ни прощаний, ни извинений.
 5. Человек пишет русским транслитом — значит, понимает русский: отвечай обычной кириллицей. По-грузински → по-грузински (language="ka"). По-английски → по-английски (language="en").
-6. Человек может назвать ДРУГОЙ адрес или квартиру, чем в объявлении: заметь это, уточни одним вопросом или передай менеджеру. Не выдавай ссылку из объявления как бесспорно правильную.
+6. Определи listing_scope: source — обсуждается исходная квартира, other — другая квартира или предложена замена, unknown — объект не установлен. При смене квартиры передай человеку: handoff, crm_status=null. Не выдавай ссылку исходного объявления за новый объект.
 7. Вопрос «есть ли у вас клиент?» — ответь честно: конкретного клиента нет; размещение в каналах агентства даёт показы и поток запросов. Не обещай появление клиента.
 8. Тон: 1–3 предложения, по-человечески, как пишут в мессенджере, без канцелярита. Максимум один эмодзи. Запрещены штампы-автопилот: «спасибо за ответ», «не буду мешать», «удачи в работе». При жалобе на повторы — коротко извинись и признай, что человек уже ответил.
 9. «Да» — положительный сигнал, только если оно отвечает на вопрос об актуальности или готовности сотрудничать. «Да» на твой уточняющий вопрос («это ваша квартира?», «правильный адрес?», «которая из квартир?») — это подтверждение собственности или адреса, а НЕ согласие и НЕ актуальность: продолжай разговор (action=reply) и закрой главный вопрос, который человек ещё не ответил, — спроси о сдаче и сотрудничестве другими словами, не повторяя уже отправленный текст. Реплика-приглашение («что вас интересует?», «я вас слушаю») или «сдана до <даты>» — НЕ сигнал: ответь по существу (action=reply) и продолжай разговор. handoff — только когда собственник подтвердил готовность к сотрудничеству или показу, либо что квартира сдаётся сейчас. crm_status="agreed" за «да, это моя квартира» без единого слова о сдаче или сотрудничестве — ошибка.
@@ -80,12 +83,13 @@ ${facts.length ? facts.join("\n") : "- Объявление без адреса"
 11. Вопрос о комиссии, договоре или коммерческих условиях агентства — не обсуждай и не называй цифры: сразу action=handoff, reply="", crm_status=null. Молча, ничего не отправляй; человек не должен заметить передачу. ВАЖНО: сам по себе вопрос о комиссии — это ВОПРОС, а не согласие сотрудничать, статус не меняй. И после ответа на вопрос человека не переспрашивай то, что уже спрашивал ранее.
 
 Верни ТОЛЬКО JSON одной строкой, без markdown-заборов и пояснений:
-{"action":"reply|silence|handoff|stop","reply":"...","language":"ru|en|ka","crm_status":"agreed|disagreed|listing_removed|realtor|null","reason":"5-15 слов"}
+{"action":"reply|silence|handoff|stop","reply":"...","language":"ru|en|ka","crm_status":"agreed|disagreed|listing_removed|realtor|null","listing_scope":"source|other|unknown","reason":"5-15 слов"}
 - action=reply → reply обязателен, будет отправлен дословно.
 - handoff → reply всегда "" — молчаливая передача, для человека это просто пауза в переписке; никаких прощаний.
 - stop → reply всегда "" — пометили в CRM и закрыли диалог молча, без прощаний.
 - silence → reply="".
-- crm_status описывает судьбу ИСХОДНОЙ квартиры из объявления, а не разговор: "agreed" — человек подтвердил готовность сотрудничать по ней или что она сдаётся; вопрос о комиссии/условиях, подтверждение адреса или собственности — НЕ agreed (оставь null или уже установленный статус); "listing_removed" — она уже сдана/снята, ДАЖЕ если человек предложил другую квартиру; "disagreed" — отказ от сотрудничества; "realtor" — собеседник риелтор. Действие выбирай отдельно от статуса: горячий лид (другая квартира, приглашение на показ, согласие) → action=handoff с честным статусом исходной квартиры. Пример: «Уже сдал, есть другая квартира» → action=handoff, crm_status=listing_removed.`;
+- crm_status меняет весь контакт, а не отдельную квартиру. agreed/disagreed/listing_removed допустимы только при одной квартире в CRM и listing_scope=source. Если квартир несколько или объект неизвестен, передай человеку с handoff и crm_status=null. realtor относится ко всему контакту.
+- «Уже сдал, есть другая квартира» → handoff, listing_scope=other, crm_status=null. Не закрывай контакт из-за одной сданной квартиры. listing_scope обязателен во всех решениях.`;
 }
 
 export function buildUserContent(input: OwnerDialogueInput): string {
@@ -99,6 +103,7 @@ export function buildUserContent(input: OwnerDialogueInput): string {
 const ACTIONS = new Set(["reply", "silence", "handoff", "stop"]);
 const STATUSES = new Set(["agreed", "disagreed", "listing_removed", "realtor", null]);
 const LANGS = new Set(["ru", "en", "ka"]);
+const LISTING_SCOPES = new Set(["source", "other", "unknown"]);
 
 function parseDecision(raw: string): OwnerReplyDecision {
   const text = raw.trim();
@@ -109,6 +114,7 @@ function parseDecision(raw: string): OwnerReplyDecision {
   const d: any = JSON.parse(body.slice(start, end + 1));
   if (!ACTIONS.has(d.action)) throw new Error(`недопустимый action: ${d.action}`);
   if (!LANGS.has(d.language)) throw new Error(`недопустимый language: ${d.language}`);
+  if (d.listing_scope !== undefined && !LISTING_SCOPES.has(d.listing_scope)) throw new Error("недопустимый listing_scope");
   if (!STATUSES.has(d.crm_status ?? null)) throw new Error(`недопустимый crm_status: ${d.crm_status}`);
   if (typeof d.reply !== "string" && !((d.action === "handoff" || d.action === "stop") && d.reply === undefined)) throw new Error("reply должен быть строкой");
   if (typeof d.reason !== "string" || !d.reason.trim()) throw new Error("reason обязателен");
@@ -117,7 +123,20 @@ function parseDecision(raw: string): OwnerReplyDecision {
   if (d.action === "handoff" && (d.crm_status === "disagreed" || d.crm_status === "realtor")) throw new Error("handoff с disagreed/realtor не нужен: отказ и риелтор не требуют менеджера");
   if (d.action === "stop" && d.crm_status === null) throw new Error("при stop укажи причину в crm_status");
   // терминальные действия (handoff/stop) всегда молчат: текст модели не доходит до собеседника
-  return { action: d.action, reply: d.action === "handoff" || d.action === "stop" ? "" : d.reply.trim(), language: d.language, crmStatus: d.crm_status ?? null, reason: d.reason.trim() };
+  return { action: d.action, reply: d.action === "handoff" || d.action === "stop" ? "" : d.reply.trim(), language: d.language, crmStatus: d.crm_status ?? null, listingScope: d.listing_scope ?? "unknown", reason: d.reason.trim() };
+}
+
+function protectContactStatus(decision: OwnerReplyDecision, input: OwnerDialogueInput): OwnerReplyDecision {
+  const count = input.contactListingCount ?? (input.listing ? 1 : 0);
+  const objectStatus = ["agreed", "disagreed", "listing_removed"].includes(decision.crmStatus ?? "");
+  // Статус CRM принадлежит всему Contact. Решение по отдельной квартире
+  // нельзя переносить на остальные объекты или на неизвестный исходный объект.
+  if (decision.crmStatus !== "realtor" && (decision.listingScope === "other" ||
+      objectStatus && (count !== 1 || !input.listing || decision.listingScope !== "source"))) {
+    return { ...decision, action: "handoff", reply: "", crmStatus: null,
+      reason: `listing_scope_review (${decision.listingScope}, listings=${count}): ${decision.reason}` };
+  }
+  return decision;
 }
 
 // ---------- Гварды ----------
@@ -189,7 +208,7 @@ export async function planOwnerReply(
     try {
       const decision = parseDecision(lastRaw);
       const errors = guardErrors(decision, input);
-      if (!errors.length) return decision;
+      if (!errors.length) return protectContactStatus(decision, input);
       messages.push({ role: "assistant", content: lastRaw },
         { role: "system", content: `Ошибка в твоем ответе: ${errors.join("; ")}. Исправь и верни весь JSON заново.` });
     } catch (error) {

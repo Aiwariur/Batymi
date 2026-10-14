@@ -8,7 +8,7 @@ function setup() {
   const h = createHarness({ OWNER_DIALOGUE_MODE: "cooperation_only" });
   const instanceId = h.config.instances[0].id, phone = "+995555700090";
   h.crm.setContactState(phone, { status: "new", listings: [
-    { id: 101, address: "Кобаладзе 12" }, { id: 102, address: "Лермонтова 31" },
+    { id: 102, address: "Лермонтова 31" },
   ] as never });
   vi.spyOn(h.services.crm, "getInteractions").mockResolvedValue([
     { id: 1, direction: "outgoing", sender: "phone", instance_id: instanceId,
@@ -24,11 +24,13 @@ type OwnerAction = "reply" | "silence" | "handoff" | "stop";
 const decision = (action: OwnerAction, reply: string, opts: {
   language?: "ru" | "en" | "ka";
   crmStatus?: "agreed" | "disagreed" | "listing_removed" | "realtor" | null;
+  listingScope?: "source" | "other" | "unknown";
   reason?: string;
 } = {}) => JSON.stringify({
   action, reply,
   language: opts.language ?? "ru",
   crm_status: opts.crmStatus ?? null,
+  listing_scope: opts.listingScope ?? "source",
   reason: opts.reason ?? "решение по последней реплике собственника",
 });
 const HANDOFF_PREFIX = "owner_dialogue: ";
@@ -50,7 +52,10 @@ const REPLY_UNCERTAIN_SEND = "Уточните, пожалуйста, кварт
 
 describe("LLM cooperation owner-dialogue execution", () => {
   it("sends the model reply verbatim and keeps the dialogue open", async () => {
-    const { h, message } = setup();
+    const { h, phone, message } = setup();
+    h.crm.setContactState(phone, { listings: [
+      { id: 101, address: "Кобаладзе 12" }, { id: 102, address: "Лермонтова 31" },
+    ] as never });
     h.llm.responder = messages => {
       expect(messages).toHaveLength(2);
       expect(messages[0].content).toContain("Лермонтова 31");
@@ -311,6 +316,104 @@ describe("LLM cooperation owner-dialogue execution", () => {
     expect(setStatus).toHaveBeenCalledWith(102, "listing_removed", { suppressTelegram: true, cooperationOnly: true });
     expect(h.debug.snapshot().outgoing).toHaveLength(0);
   });
+
+  it.each([
+    ["agreed", "handoff", "Да, готов сотрудничать с вами"],
+    ["disagreed", "stop", "Нет, сотрудничать не готов"],
+    ["listing_removed", "stop", "Квартира уже сдана"],
+  ] as const)("routes %s to review when the contact has multiple listings", async (status, action, incoming) => {
+    const { h, phone, instanceId, message } = setup();
+    h.crm.setContactState(phone, { listings: [{ id: 101 }, { id: 102 }] as never });
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const reportReview = vi.fn(async () => undefined);
+    h.services.crm.reportReview = reportReview;
+    h.llm.responder = () => decision(action, "", { crmStatus: status, listingScope: "source" });
+
+    await h.ingest(message(incoming));
+    const outcome = (await h.scheduler.runAll())[0];
+    const key = h.key(instanceId, `${phone.slice(1)}@c.us`);
+
+    expect(outcome).toMatchObject({ status: "processed", stopConversation: true, reply: "" });
+    expect(setStatus).not.toHaveBeenCalled();
+    expect((await h.crm.getListingsByPhone(phone)).every(row => row.crm_status === "new")).toBe(true);
+    expect(await h.store.getManualHandoff(key)).toContain("listing_scope_review");
+    expect(reportReview).toHaveBeenCalledWith(phone.slice(1), expect.objectContaining({
+      reason: expect.stringContaining("listing_scope_review"), state: "review_required",
+    }));
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
+
+  it("counts an apartment excluded by the manager filter before allowing a contact status", async () => {
+    const { h, phone, instanceId, message } = setup();
+    h.crm.setContactState(phone, { listings: [{ id: 101 }, { id: 102 }] as never });
+    const readListings = h.crm.getListingsByPhone.bind(h.crm);
+    vi.spyOn(h.services.crm, "getListingsByPhone").mockImplementation(async number =>
+      (await readListings(number)).map(row => row.id === 101
+        ? { ...row, assigned_manager_is_ai: false } : row));
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    h.llm.responder = messages => {
+      expect(messages[0].content).toContain("Всего квартир контакта в CRM: 2");
+      return decision("handoff", "", { crmStatus: "agreed", listingScope: "source" });
+    };
+    await h.ingest(message("Да, сдаётся"));
+    await h.scheduler.runAll();
+    expect(setStatus).not.toHaveBeenCalled();
+    expect((await readListings(phone)).every(row => row.crm_status === "new")).toBe(true);
+    expect(await h.store.getManualHandoff(h.key(instanceId, `${phone.slice(1)}@c.us`)))
+      .toContain("listing_scope_review");
+  });
+
+  it("rechecks multi-listing scope after planning and blocks later audio automation", async () => {
+    const { h, phone, instanceId, message } = setup();
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const reportReview = vi.fn(async () => undefined);
+    h.services.crm.reportReview = reportReview;
+    const sendMessage = vi.spyOn(h.services.sender, "sendMessage");
+    const transcribe = vi.spyOn(h.services.transcription, "transcribe").mockResolvedValue("Да, готов сотрудничать");
+    h.llm.responder = () => {
+      h.crm.setContactState(phone, { listings: [{ id: 101 }, { id: 102 }] as never });
+      return decision("handoff", "", { crmStatus: "agreed", listingScope: "source" });
+    };
+
+    await h.ingest(message("Да, готов сотрудничать"));
+    await h.scheduler.runAll();
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(await h.store.getManualHandoff(h.key(instanceId, `${phone.slice(1)}@c.us`))).toContain("listing_scope_review");
+    expect(reportReview).toHaveBeenCalledTimes(1);
+    expect(h.llm.calls).toHaveLength(1);
+    expect(transcribe).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+
+    await h.ingest({ ...message(""), type: "audio", rawType: "audioMessage", text: undefined, fileUrl: "https://greenapi.example/later.ogg" });
+    expect((await h.scheduler.runAll())[0]).toMatchObject({ status: "skipped", stopConversation: true });
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(reportReview).toHaveBeenCalledTimes(1);
+    expect(h.llm.calls).toHaveLength(1);
+    expect(transcribe).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
+
+  it("routes a removed other listing to review and preserves every listing status", async () => {
+    const { h, phone, instanceId, message } = setup();
+    h.crm.setContactState(phone, { listings: [{ id: 101 }, { id: 102 }] as never });
+    const setStatus = vi.spyOn(h.services.crm, "setStatus");
+    const reportReview = vi.fn(async () => undefined);
+    h.services.crm.reportReview = reportReview;
+    h.llm.responder = () => decision("stop", "", {
+      crmStatus: "listing_removed", listingScope: "other", reason: "другая квартира уже сдана",
+    });
+
+    await h.ingest(message("Эту уже сдал, есть другая"));
+    await h.scheduler.runAll();
+
+    expect(setStatus).not.toHaveBeenCalled();
+    expect((await h.crm.getListingsByPhone(phone)).every(row => row.crm_status === "new")).toBe(true);
+    expect(await h.store.getManualHandoff(h.key(instanceId, `${phone.slice(1)}@c.us`))).toContain("listing_scope_review");
+    expect(reportReview).toHaveBeenCalledWith(phone.slice(1), expect.objectContaining({ state: "review_required" }));
+    expect(h.debug.snapshot().outgoing).toHaveLength(0);
+  });
   it("persists the model decision once across a lost CRM response", async () => {
     const { h, message } = setup();
     h.llm.responder = () => decision("handoff", "", { crmStatus: "agreed", reason: "согласие подтверждено своими словами" });
@@ -365,6 +468,7 @@ describe("LLM cooperation owner-dialogue execution", () => {
   });
   it("stops silently on a Georgian realtor across all listings", async () => {
     const { h, phone, message } = setup();
+    h.crm.setContactState(phone, { listings: [{ id: 101 }, { id: 102 }] as never });
     const setStatus = vi.spyOn(h.services.crm, "setStatus");
     h.llm.responder = messages => {
       expect(messages.at(-1)?.content?.endsWith("[Собственник] გამარჯობა მეც აგენტი ვარ ვითანამშრომლოთ 50/50")).toBe(true);

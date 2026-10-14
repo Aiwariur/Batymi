@@ -331,7 +331,7 @@ export async function handleConversationJob(
       }
       if (!checkpoint) {
         stage = "cooperation.llm";
-        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, interactions, instanceId, representativeName: instance.name, agencyName: services.config.agencyName, crmBaseUrl: services.config.crmBaseUrl,
+        const result = await planCooperation(services.llm, { history, batchText, listings: allowedListings, contactListingCount: listings.length, interactions, instanceId, representativeName: instance.name, agencyName: services.config.agencyName, crmBaseUrl: services.config.crmBaseUrl,
           onRaw: raw => runTrace.record(runId, "cooperation.model", { raw }) });
         checkpoint = {
           mode: "cooperation_only", plannerVersion: COOPERATION_PLANNER_VERSION, manualHandoffReason: result.handoffReason,
@@ -340,7 +340,7 @@ export async function handleConversationJob(
         log.info({ actions: result.actions.length, selectedListingId: result.selectedListingId, replyPlanned: !!result.reply }, "cooperation.model.completed");
         await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
-      const action = checkpoint.result.actions[0];
+      let action: AgentResult["actions"][number] | undefined = checkpoint.result.actions[0];
       if (action && checkpoint.completedActions === 0) {
         if (action.type !== "set_crm_status" || !["agreed", "disagreed", "realtor", "listing_removed"].includes(action.status))
           throw new Error("invalid cooperation checkpoint");
@@ -348,8 +348,9 @@ export async function handleConversationJob(
           throw new Error("conversation lock lost before cooperation status");
         const latestListings = await services.crm.getListingsByPhone(phone);
         const latestHistory = await services.crm.getInteractions(phone, instanceId, 50);
+        const actionListingId = action.listingId;
         const target = filterListingsByManager(latestListings, instance.managerId, services.config.allowedManagerIds)
-          .find(listing => String(listing.id) === String(action.listingId));
+          .find(listing => String(listing.id) === String(actionListingId));
         const takenOver = assembleCrmHistory(latestHistory, [], batch, instanceId).managerTakeover;
         if (!target || isTerminalListing(target, services.config.terminalCrmStatuses) && target.crm_status !== action.status ||
             takenOver) {
@@ -357,14 +358,24 @@ export async function handleConversationJob(
           else await services.store.ackBatch(key, activeBatch.batchKey);
           return outcome("skipped", runId);
         }
-        const write = await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
-        if (write?.applied === false) {
-          log.info({ status: write.status }, "cooperation.status.not_applied");
-          await services.store.ackBatch(key, activeBatch.batchKey);
-          return outcome("skipped", runId);
+        // Recheck the complete contact immediately before writing: a second
+        // listing may have appeared while the model was planning this batch.
+        if (action.status !== "realtor" && latestListings.length !== 1) {
+          checkpoint.result.actions = [];
+          checkpoint.result.stopConversation = true;
+          checkpoint.manualHandoffReason = "listing_scope_review: contact has multiple listings before status write";
+          await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
+          action = undefined;
+        } else {
+          const write = await services.crm.setStatus(target.id, action.status, { suppressTelegram: true, cooperationOnly: true });
+          if (write?.applied === false) {
+            log.info({ status: write.status }, "cooperation.status.not_applied");
+            await services.store.ackBatch(key, activeBatch.batchKey);
+            return outcome("skipped", runId);
+          }
+          checkpoint.completedActions = 1;
+          await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
         }
-        checkpoint.completedActions = 1;
-        await services.store.saveAgentCheckpoint(key, activeBatch.batchKey, checkpoint, lock.token);
       }
       if (action) executed.push("set_crm_status");
       log.info({ decision: action?.type === "set_crm_status" ? action.status : checkpoint.reply ? "owner_reply" : "manual_review" }, "cooperation.completed");

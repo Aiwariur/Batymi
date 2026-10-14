@@ -21,10 +21,10 @@ const outreach = (listingId = 402, text = COOPERATION_QUESTION): CrmInteraction 
 const decision = (d: Record<string, unknown>) => JSON.stringify(d);
 const replyDecision = (reply: string, extra: Record<string, unknown> = {}) =>
   decision({ action: "reply", reply, language: "ru", crm_status: null, reason: "тестовая реплика по делу", ...extra });
-const handoffDecision = (crm_status: string | null, reason = "тестовая передача менеджеру") =>
-  decision({ action: "handoff", reply: "", language: "ru", crm_status, reason });
-const stopDecision = (crm_status: string, reason = "тестовое завершение диалога") =>
-  decision({ action: "stop", reply: "", language: "ru", crm_status, reason });
+const handoffDecision = (crm_status: string | null, reason = "тестовая передача менеджеру", listing_scope = "source") =>
+  decision({ action: "handoff", reply: "", language: "ru", crm_status, listing_scope, reason });
+const stopDecision = (crm_status: string, reason = "тестовое завершение диалога", listing_scope = "source") =>
+  decision({ action: "stop", reply: "", language: "ru", crm_status, listing_scope, reason });
 
 interface RecordedCall { messages: ChatMessage[]; opts?: { temperature?: number; maxTokens?: number } }
 function script(responses: string[]) {
@@ -44,15 +44,15 @@ const systemPrompt = (calls: RecordedCall[]) => calls[0].messages[0].content;
 const userContent = (calls: RecordedCall[]) => calls[0].messages[calls[0].messages.length - 1].content;
 
 describe("planCooperation owner-dialogue adapter", () => {
-  it("bumps the planner version so saved semantic checkpoints are replanned", () => {
-    expect(COOPERATION_PLANNER_VERSION).not.toBe("semantic_v3");
+  it("uses owner_dialogue_v2 so saved v1 checkpoints are replanned", () => {
+    expect(COOPERATION_PLANNER_VERSION).toBe("owner_dialogue_v2");
   });
 
   it("always asks the model for a bare yes — no keyword short-circuit", async () => {
     const { provider, calls } = script([handoffDecision("agreed", "да на вопрос о сотрудничестве")]);
     const history: HistoryEntry[] = [{ role: "assistant", content: COOPERATION_QUESTION, ts: 1 }];
     const result = await planCooperation(provider, {
-      history, batchText: "да", listings, interactions: [outreach(402)], instanceId,
+      history, batchText: "да", listings: [listings[1]], contactListingCount: 1, interactions: [outreach(402)], instanceId,
     });
     expect(provider.complete).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
@@ -77,6 +77,7 @@ describe("planCooperation owner-dialogue adapter", () => {
     expect(systemPrompt(calls)).toContain("https://example.com/flat/402");
     expect(systemPrompt(calls)).toContain("Светлая двушка у моря");
     expect(systemPrompt(calls)).toContain("Конкретного клиента на эту квартиру сейчас нет");
+    expect(systemPrompt(calls)).toContain("listing_scope");
     expect(userContent(calls)).toContain("[Собственник] Здравствуите");
   });
 
@@ -96,7 +97,7 @@ describe("planCooperation owner-dialogue adapter", () => {
   ] as const)("maps stop with reason %s to a silent terminal status", async (status, reason) => {
     const { provider } = script([stopDecision(status, reason)]);
     const result = await planCooperation(provider, {
-      history: [], batchText: "текст реплики собственника", listings, interactions: [outreach(402)], instanceId,
+      history: [], batchText: "текст реплики собственника", listings: [listings[1]], contactListingCount: 1, interactions: [outreach(402)], instanceId,
     });
     expect(result).toMatchObject({
       actions: [{ type: "set_crm_status", listingId: 402, status }],
@@ -157,11 +158,11 @@ describe("planCooperation owner-dialogue adapter", () => {
   it("routes a stop reason to a manual handoff when no listing can be identified", async () => {
     const { provider } = script([stopDecision("disagreed", "отказ без идентифицируемого объекта")]);
     const result = await planCooperation(provider, {
-      history: [], batchText: "не актуально", listings, interactions: [outreach(999)], instanceId,
+      history: [], batchText: "не актуально", listings: [listings[1]], contactListingCount: 1, interactions: [outreach(999)], instanceId,
     });
     expect(result.actions).toEqual([]);
     expect(result).toMatchObject({ reply: "", stopConversation: true });
-    expect(result.handoffReason ?? "").toContain("no_listing_for_status");
+    expect(result.handoffReason ?? "").toContain("listing_scope_review");
   });
 
   it("repairs a reply that leaks the manager/colleague handoff wording", async () => {
@@ -183,5 +184,64 @@ describe("planCooperation owner-dialogue adapter", () => {
     });
     expect(provider.complete).toHaveBeenCalledTimes(1);
     expect(calls[0].opts).toMatchObject({ temperature: 0.3, maxTokens: 2000, jsonMode: false });
+  });
+
+  it.each(["agreed", "disagreed", "listing_removed"] as const)(
+    "requires a single contact listing before applying source status %s",
+    async (status) => {
+      const raw = status === "agreed"
+        ? handoffDecision(status, "подтвержден исходный объект", "source")
+        : stopDecision(status, "подтвержден исходный объект", "source");
+      const { provider } = script([raw]);
+      const result = await planCooperation(provider, {
+        history: [], batchText: "ответ по объявлению", listings: [listings[1]], contactListingCount: 2,
+        interactions: [outreach(402)], instanceId,
+      });
+      expect(result.actions).toEqual([]);
+      expect(result.handoffReason).toContain("listing_scope_review");
+      expect(result.stopConversation).toBe(true);
+    },
+  );
+
+  it("uses the full contact listing count even when only one listing was passed to the planner", async () => {
+    const { provider } = script([handoffDecision("agreed", "согласие по исходному объявлению", "source")]);
+    const result = await planCooperation(provider, {
+      history: [], batchText: "да", listings: [listings[1]], contactListingCount: 2,
+      interactions: [outreach(402)], instanceId,
+    });
+    expect(result.actions).toEqual([]);
+    expect(result.handoffReason).toContain("listing_scope_review");
+  });
+
+  it("applies a source status when the contact has exactly one listing", async () => {
+    const { provider } = script([handoffDecision("agreed", "согласие по исходному объявлению", "source")]);
+    const result = await planCooperation(provider, {
+      history: [], batchText: "да", listings: [listings[1]], contactListingCount: 1,
+      interactions: [outreach(402)], instanceId,
+    });
+    expect(result.actions).toEqual([{ type: "set_crm_status", listingId: 402, status: "agreed" }]);
+  });
+
+  it.each([
+    ["other", decision({ action: "stop", reply: "", language: "ru", crm_status: "listing_removed", listing_scope: "other", reason: "другая квартира уже сдана" })],
+    ["missing", decision({ action: "stop", reply: "", language: "ru", crm_status: "listing_removed", reason: "статус без scope" })],
+    ["unknown", decision({ action: "stop", reply: "", language: "ru", crm_status: "listing_removed", listing_scope: "unknown", reason: "неясно, о какой квартире речь" })],
+  ] as const)("sends %s object scope to manager review without a status write", async (_scope, raw) => {
+    const { provider } = script([raw]);
+    const result = await planCooperation(provider, {
+      history: [], batchText: "уже сдана", listings: [listings[1]], contactListingCount: 1,
+      interactions: [outreach(402)], instanceId,
+    });
+    expect(result.actions).toEqual([]);
+    expect(result.handoffReason).toContain("listing_scope_review");
+  });
+
+  it("keeps realtor status contact-wide when multiple listings exist", async () => {
+    const { provider } = script([stopDecision("realtor", "собеседник риелтор", "other")]);
+    const result = await planCooperation(provider, {
+      history: [], batchText: "я риелтор", listings, contactListingCount: 2,
+      interactions: [outreach(402)], instanceId,
+    });
+    expect(result.actions).toEqual([{ type: "set_crm_status", listingId: 402, status: "realtor" }]);
   });
 });

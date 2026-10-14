@@ -6,7 +6,7 @@ import { HistoryEntry, Listing } from "../types";
 import { OUTREACH_QUESTION, planOwnerReply } from "./owner-dialogue-core";
 
 export const COOPERATION_QUESTION = OUTREACH_QUESTION;
-export const COOPERATION_PLANNER_VERSION = "owner_dialogue_v1";
+export const COOPERATION_PLANNER_VERSION = "owner_dialogue_v2";
 export type CooperationResult = AgentResult & { handoffReason?: string };
 
 export function publicListingUrl(value?: string | null, crmBaseUrl?: string): string | undefined {
@@ -29,6 +29,7 @@ export function publicListingUrl(value?: string | null, crmBaseUrl?: string): st
  */
 export async function planCooperation(llm: LlmProvider, input: {
   history: HistoryEntry[]; batchText: string; listings: Listing[];
+  contactListingCount?: number;
   interactions: CrmInteraction[]; instanceId: string;
   representativeName?: string; agencyName?: string; crmBaseUrl?: string;
   onRaw?: (raw: string) => Promise<void>;
@@ -61,6 +62,7 @@ export async function planCooperation(llm: LlmProvider, input: {
         url: publicListingUrl(target.url, input.crmBaseUrl),
         description: target.description ?? undefined,
       } : undefined,
+      contactListingCount: Math.max(input.contactListingCount ?? 0, input.listings.length),
       facts: { knownClient: false },
       history: input.history.map(entry => ({
         role: entry.role === "assistant" ? "agent" as const : "owner" as const,
